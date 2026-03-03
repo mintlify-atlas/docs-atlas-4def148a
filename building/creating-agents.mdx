@@ -1,0 +1,340 @@
+---
+title: Creating Agents
+description: Learn how to create goal-driven agents in the Hive framework
+---
+
+# Creating Agents
+
+Hive agents are goal-driven systems that combine nodes, edges, and tools to accomplish specific tasks. This guide walks you through creating a complete agent from scratch.
+
+## Agent Structure
+
+Every Hive agent consists of:
+
+- **Goal** - Defines what success looks like
+- **Nodes** - Processing units that execute tasks
+- **Edges** - Control flow between nodes
+- **Tools** - Integrations for external actions
+- **Configuration** - Model settings and metadata
+
+## Quick Start
+
+Here's a minimal agent structure:
+
+```python
+from framework.graph import Goal, NodeSpec, EdgeSpec, EdgeCondition
+from framework.graph.edge import GraphSpec
+
+# 1. Define your goal
+goal = Goal(
+    id="my-agent",
+    name="My Agent",
+    description="What this agent accomplishes",
+    success_criteria=[],
+    constraints=[]
+)
+
+# 2. Define nodes
+nodes = [
+    NodeSpec(
+        id="main",
+        name="Main Node",
+        description="Primary processing node",
+        node_type="event_loop",
+        system_prompt="You are a helpful assistant.",
+        input_keys=["request"],
+        output_keys=["response"]
+    )
+]
+
+# 3. Define edges (optional for single-node agents)
+edges = []
+
+# 4. Build the graph
+graph = GraphSpec(
+    id="my-agent-graph",
+    goal_id=goal.id,
+    version="1.0.0",
+    entry_node="main",
+    entry_points={"start": "main"},
+    nodes=nodes,
+    edges=edges
+)
+```
+
+## Creating a Multi-Node Agent
+
+Here's a real example from the framework - a research agent with multiple phases:
+
+```python
+from framework.graph import Goal, NodeSpec, EdgeSpec, EdgeCondition, SuccessCriterion, Constraint
+
+# Define goal with success criteria
+goal = Goal(
+    id="rigorous-interactive-research",
+    name="Rigorous Interactive Research",
+    description=(
+        "Research any topic by searching diverse sources, analyzing findings, "
+        "and producing a cited report — with user checkpoints to guide direction."
+    ),
+    success_criteria=[
+        SuccessCriterion(
+            id="source-diversity",
+            description="Use multiple diverse, authoritative sources",
+            metric="source_count",
+            target=">=5",
+            weight=0.25,
+        ),
+        SuccessCriterion(
+            id="citation-coverage",
+            description="Every factual claim in the report cites its source",
+            metric="citation_coverage",
+            target="100%",
+            weight=0.25,
+        ),
+    ],
+    constraints=[
+        Constraint(
+            id="no-hallucination",
+            description="Only include information found in fetched sources",
+            constraint_type="hard",
+            category="accuracy",
+        ),
+    ],
+)
+
+# Define nodes
+intake_node = NodeSpec(
+    id="intake",
+    name="Research Intake",
+    description="Gather research requirements from user",
+    node_type="event_loop",
+    system_prompt="Ask the user what they want to research.",
+    input_keys=[],
+    output_keys=["research_topic", "research_questions"],
+    client_facing=True,  # Interacts with user
+)
+
+research_node = NodeSpec(
+    id="research",
+    name="Research Executor",
+    description="Search and analyze sources",
+    node_type="event_loop",
+    system_prompt="Search for information and analyze findings.",
+    input_keys=["research_topic", "research_questions"],
+    output_keys=["findings", "sources"],
+    tools=["web_search", "fetch_url"],  # Available tools
+)
+
+review_node = NodeSpec(
+    id="review",
+    name="Review Findings",
+    description="Present findings to user for review",
+    node_type="event_loop",
+    system_prompt="Show findings and ask if more research is needed.",
+    input_keys=["findings", "sources"],
+    output_keys=["needs_more_research"],
+    client_facing=True,
+)
+
+report_node = NodeSpec(
+    id="report",
+    name="Generate Report",
+    description="Create final research report",
+    node_type="event_loop",
+    system_prompt="Create a well-cited report from findings.",
+    input_keys=["findings", "sources"],
+    output_keys=["report", "next_action"],
+    client_facing=True,
+)
+
+nodes = [intake_node, research_node, review_node, report_node]
+```
+
+## Connecting Nodes with Edges
+
+Edges define how execution flows between nodes:
+
+```python
+edges = [
+    # Linear flow: intake → research
+    EdgeSpec(
+        id="intake-to-research",
+        source="intake",
+        target="research",
+        condition=EdgeCondition.ON_SUCCESS,
+        priority=1,
+    ),
+    
+    # research → review
+    EdgeSpec(
+        id="research-to-review",
+        source="research",
+        target="review",
+        condition=EdgeCondition.ON_SUCCESS,
+        priority=1,
+    ),
+    
+    # Feedback loop: review → research (if more research needed)
+    EdgeSpec(
+        id="review-to-research-feedback",
+        source="review",
+        target="research",
+        condition=EdgeCondition.CONDITIONAL,
+        condition_expr="needs_more_research == True",
+        priority=1,
+    ),
+    
+    # Conditional: review → report (when satisfied)
+    EdgeSpec(
+        id="review-to-report",
+        source="review",
+        target="report",
+        condition=EdgeCondition.CONDITIONAL,
+        condition_expr="needs_more_research == False",
+        priority=2,
+    ),
+]
+```
+
+## Agent Class Implementation
+
+Wrap your agent in a class for runtime management:
+
+```python
+from pathlib import Path
+from framework.graph.edge import GraphSpec
+from framework.llm import LiteLLMProvider
+from framework.runner.tool_registry import ToolRegistry
+from framework.runtime.agent_runtime import create_agent_runtime
+from framework.runtime.execution_stream import EntryPointSpec
+from framework.graph.checkpoint_config import CheckpointConfig
+
+class ResearchAgent:
+    """Multi-node research agent with user checkpoints."""
+    
+    def __init__(self, config=None):
+        self.goal = goal
+        self.nodes = nodes
+        self.edges = edges
+        self.entry_node = "intake"
+        self._agent_runtime = None
+        self._storage_path = Path.home() / ".hive" / "agents" / "research_agent"
+    
+    def _setup(self, mock_mode=False):
+        """Set up the agent runtime."""
+        self._storage_path.mkdir(parents=True, exist_ok=True)
+        
+        # Set up tool registry
+        tool_registry = ToolRegistry()
+        mcp_config_path = Path(__file__).parent / "mcp_servers.json"
+        if mcp_config_path.exists():
+            tool_registry.load_mcp_config(mcp_config_path)
+        
+        # Create LLM provider
+        llm = None if mock_mode else LiteLLMProvider(
+            model="claude-sonnet-4-20250514",
+            api_key="your-api-key",
+        )
+        
+        # Build graph
+        graph = GraphSpec(
+            id="research-agent-graph",
+            goal_id=self.goal.id,
+            version="1.0.0",
+            entry_node=self.entry_node,
+            entry_points={"start": self.entry_node},
+            nodes=self.nodes,
+            edges=self.edges,
+            conversation_mode="continuous",  # Thread conversation across nodes
+            identity_prompt="You are a rigorous research agent.",
+            loop_config={
+                "max_iterations": 100,
+                "max_tool_calls_per_turn": 30,
+            },
+        )
+        
+        # Create agent runtime
+        self._agent_runtime = create_agent_runtime(
+            graph=graph,
+            goal=self.goal,
+            storage_path=self._storage_path,
+            entry_points=[EntryPointSpec(
+                id="default",
+                name="Default",
+                entry_node=self.entry_node,
+                trigger_type="manual",
+            )],
+            llm=llm,
+            tools=list(tool_registry.get_tools().values()),
+            tool_executor=tool_registry.get_executor(),
+            checkpoint_config=CheckpointConfig(enabled=True),
+        )
+    
+    async def start(self, mock_mode=False):
+        """Initialize and start the agent."""
+        if self._agent_runtime is None:
+            self._setup(mock_mode=mock_mode)
+        if not self._agent_runtime.is_running:
+            await self._agent_runtime.start()
+    
+    async def run(self, input_data: dict):
+        """Execute the agent."""
+        await self.start()
+        return await self._agent_runtime.trigger_and_wait(
+            entry_point_id="default",
+            input_data=input_data,
+        )
+```
+
+## Agent File Structure
+
+Organize your agent as a Python package:
+
+```
+my_agent/
+├── __init__.py          # Package exports
+├── __main__.py          # CLI entry point
+├── agent.py             # Agent class and graph definition
+├── config.py            # Configuration and metadata
+├── mcp_servers.json     # Tool configurations
+└── nodes/
+    └── __init__.py      # Node definitions (optional)
+```
+
+## Using the MCP Server
+
+The framework provides an MCP server for interactive agent building:
+
+```bash
+# Start MCP server
+uv run python -m framework.mcp.agent_builder_server
+```
+
+The server provides tools for:
+- Creating sessions
+- Defining goals
+- Adding nodes and edges
+- Validating graphs
+- Exporting agents
+
+<Note>
+See the [MCP Server Guide](/tools/mcp-server-guide) for detailed usage.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Defining Goals" icon="bullseye" href="/building/defining-goals">
+    Learn how to define success criteria and constraints
+  </Card>
+  <Card title="Node Configuration" icon="circle-nodes" href="/building/node-configuration">
+    Configure node behavior and parameters
+  </Card>
+  <Card title="Tools & Integrations" icon="wrench" href="/building/tools-and-integrations">
+    Add external tools and MCP servers
+  </Card>
+  <Card title="Testing" icon="flask" href="/building/testing-agents">
+    Write and run tests for your agents
+  </Card>
+</CardGroup>

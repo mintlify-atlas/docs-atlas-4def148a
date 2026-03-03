@@ -1,0 +1,513 @@
+---
+title: MCP Server Setup
+description: Configure and run the Model Context Protocol server for Hive tools
+---
+
+# MCP Server Setup
+
+The MCP (Model Context Protocol) server exposes all Hive tools to AI agents. It can run in HTTP mode for production or STDIO mode for local testing.
+
+## Quick Start
+
+<Steps>
+  <Step title="Install Dependencies">
+    ```bash
+    cd tools
+    uv pip install -e .
+    ```
+  </Step>
+  
+  <Step title="Set Environment Variables">
+    ```bash
+    export ANTHROPIC_API_KEY=your_key_here
+    export BRAVE_SEARCH_API_KEY=your_key_here  # Optional
+    ```
+  </Step>
+  
+  <Step title="Run the Server">
+    ```bash
+    python mcp_server.py
+    ```
+  </Step>
+</Steps>
+
+The server starts on `http://0.0.0.0:4001` by default.
+
+## Server Modes
+
+### HTTP Mode (Production)
+
+HTTP mode is used for production deployments and Docker containers.
+
+<CodeGroup>
+
+```bash Default Port
+python mcp_server.py
+# Starts on port 4001
+```
+
+```bash Custom Port
+python mcp_server.py --port 8001
+# Starts on port 8001
+```
+
+```bash Custom Host
+python mcp_server.py --host 127.0.0.1 --port 4001
+# Bind to localhost only
+```
+
+</CodeGroup>
+
+### STDIO Mode (Local Testing)
+
+STDIO mode is used for local testing and direct integration with MCP clients.
+
+```bash
+python mcp_server.py --stdio
+```
+
+<Note>
+In STDIO mode, only JSON-RPC messages go to stdout. All logs go to stderr.
+</Note>
+
+## Configuration
+
+### Environment Variables
+
+<ParamField path="MCP_PORT" type="integer" default="4001">
+  HTTP server port
+</ParamField>
+
+<ParamField path="ANTHROPIC_API_KEY" type="string" required>
+  Anthropic API key (required at startup)
+</ParamField>
+
+<ParamField path="BRAVE_SEARCH_API_KEY" type="string">
+  Brave Search API key (validated at agent load time)
+</ParamField>
+
+<ParamField path="GOOGLE_API_KEY" type="string">
+  Google API key (for Custom Search, Maps, etc.)
+</ParamField>
+
+<ParamField path="GOOGLE_CSE_ID" type="string">
+  Google Custom Search Engine ID
+</ParamField>
+
+<ParamField path="SLACK_BOT_TOKEN" type="string">
+  Slack Bot OAuth token
+</ParamField>
+
+<ParamField path="DISCORD_BOT_TOKEN" type="string">
+  Discord bot token
+</ParamField>
+
+<ParamField path="GITHUB_TOKEN" type="string">
+  GitHub personal access token
+</ParamField>
+
+### Example Configuration
+
+```bash .env
+# Required
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Search (pick one)
+BRAVE_SEARCH_API_KEY=BSA...
+# OR
+GOOGLE_API_KEY=AIza...
+GOOGLE_CSE_ID=abc123...
+
+# Communication
+SLACK_BOT_TOKEN=xoxb-...
+DISCORD_BOT_TOKEN=...
+
+# Cloud Services
+GITHUB_TOKEN=ghp_...
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+
+# Server
+MCP_PORT=4001
+```
+
+## Credential Validation
+
+The server uses a two-tier credential validation system:
+
+### Tier 1: Startup Validation
+
+Required credentials checked at server startup:
+- `ANTHROPIC_API_KEY` - Must be set before server starts
+
+```python
+try:
+    credentials.validate_startup()
+    logger.info("Startup credentials validated")
+except CredentialError as e:
+    logger.warning(str(e))
+```
+
+### Tier 2: Agent Load Validation
+
+Tool-specific credentials validated when an agent is loaded:
+- `BRAVE_SEARCH_API_KEY` or `GOOGLE_API_KEY` - For web search
+- `SLACK_BOT_TOKEN` - For Slack tools
+- `GITHUB_TOKEN` - For GitHub tools
+- etc.
+
+```python
+result = web_search(query="test")
+if "error" in result:
+    # Credentials not configured
+    print(result["help"])  # Instructions for getting API key
+```
+
+<Tip>
+The server starts even if tool credentials are missing. Agents will receive clear error messages when trying to use tools without credentials.
+</Tip>
+
+## Endpoints
+
+### Health Check
+
+```bash
+curl http://localhost:4001/health
+# Response: OK
+```
+
+Use for container health checks and monitoring.
+
+### Root Endpoint
+
+```bash
+curl http://localhost:4001/
+# Response: Welcome to the Hive MCP Server
+```
+
+### MCP Protocol
+
+MCP clients connect to the root endpoint via Server-Sent Events (SSE):
+
+```python MCP Client
+import mcp
+
+client = mcp.ClientSession(
+    server_url="http://localhost:4001",
+    timeout=30.0
+)
+
+# List available tools
+tools = await client.list_tools()
+
+# Call a tool
+result = await client.call_tool(
+    name="web_search",
+    arguments={"query": "fastmcp", "num_results": 5}
+)
+```
+
+## Docker Deployment
+
+### Dockerfile
+
+```dockerfile Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY tools/pyproject.toml tools/
+RUN pip install -e tools/
+
+# Copy source code
+COPY tools/ tools/
+
+# Expose port
+EXPOSE 4001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:4001/health || exit 1
+
+# Run server
+CMD ["python", "tools/mcp_server.py", "--host", "0.0.0.0", "--port", "4001"]
+```
+
+### Docker Compose
+
+```yaml docker-compose.yml
+version: '3.8'
+
+services:
+  mcp-server:
+    build: .
+    ports:
+      - "4001:4001"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - BRAVE_SEARCH_API_KEY=${BRAVE_SEARCH_API_KEY}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - MCP_PORT=4001
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4001/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+```
+
+### Running with Docker
+
+<CodeGroup>
+
+```bash Build and Run
+docker-compose up -d
+```
+
+```bash View Logs
+docker-compose logs -f mcp-server
+```
+
+```bash Stop Server
+docker-compose down
+```
+
+</CodeGroup>
+
+## Monitoring
+
+### Logs
+
+The server logs important events:
+
+```bash
+[MCP] Startup credentials validated
+[MCP] Registered 150 tools: ['web_search', 'view_file', ...]
+[MCP] Starting HTTP server on 0.0.0.0:4001
+```
+
+### Health Monitoring
+
+```bash Health Check Script
+#!/bin/bash
+
+HEALTH_URL="http://localhost:4001/health"
+RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" $HEALTH_URL)
+
+if [ $RESPONSE -eq 200 ]; then
+  echo "Server is healthy"
+  exit 0
+else
+  echo "Server is down (HTTP $RESPONSE)"
+  exit 1
+fi
+```
+
+### Metrics
+
+For production monitoring, integrate with:
+- **Prometheus** - Metric collection
+- **Grafana** - Visualization
+- **Sentry** - Error tracking
+
+## Scaling
+
+### Horizontal Scaling
+
+Run multiple server instances behind a load balancer:
+
+```nginx nginx.conf
+upstream mcp_servers {
+    server mcp-server-1:4001;
+    server mcp-server-2:4001;
+    server mcp-server-3:4001;
+}
+
+server {
+    listen 80;
+    
+    location / {
+        proxy_pass http://mcp_servers;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+    
+    location /health {
+        proxy_pass http://mcp_servers/health;
+    }
+}
+```
+
+### Resource Limits
+
+Set appropriate resource limits in docker-compose.yml:
+
+```yaml
+services:
+  mcp-server:
+    # ...
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+```
+
+## Security
+
+### API Key Management
+
+<Warning>
+Never commit API keys to version control. Use environment variables or secrets management.
+</Warning>
+
+```bash Secrets Management
+# Use Docker secrets
+docker secret create anthropic_key anthropic_api_key.txt
+
+# Or use cloud provider secrets
+# AWS Secrets Manager
+# Google Secret Manager
+# Azure Key Vault
+```
+
+### Network Security
+
+```yaml docker-compose.yml
+services:
+  mcp-server:
+    networks:
+      - internal
+    # Only expose via reverse proxy
+    # ports:
+    #   - "4001:4001"
+
+networks:
+  internal:
+    driver: bridge
+```
+
+### Rate Limiting
+
+Implement rate limiting at the reverse proxy level:
+
+```nginx nginx.conf
+limit_req_zone $binary_remote_addr zone=mcp:10m rate=10r/s;
+
+server {
+    location / {
+        limit_req zone=mcp burst=20;
+        proxy_pass http://mcp_servers;
+    }
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Server Won't Start">
+    Check:
+    - `ANTHROPIC_API_KEY` is set
+    - Port 4001 is not already in use
+    - Python version is 3.11+
+    
+    ```bash
+    # Check port usage
+    lsof -i :4001
+    
+    # Check environment
+    echo $ANTHROPIC_API_KEY
+    
+    # Check Python version
+    python --version
+    ```
+  </Accordion>
+
+  <Accordion title="Tool Returns Error">
+    Most tool errors are due to missing credentials:
+    
+    ```python
+    result = web_search(query="test")
+    if "error" in result:
+        print(result["error"])  # "Brave credentials not configured"
+        print(result["help"])   # "Set BRAVE_SEARCH_API_KEY..."
+    ```
+    
+    Set the required environment variable and restart the server.
+  </Accordion>
+
+  <Accordion title="High Memory Usage">
+    - Limit concurrent requests
+    - Set resource limits in Docker
+    - Monitor for memory leaks
+    - Restart server periodically
+    
+    ```bash
+    # Monitor memory
+    docker stats mcp-server
+    ```
+  </Accordion>
+
+  <Accordion title="Connection Timeouts">
+    - Increase client timeout
+    - Check network connectivity
+    - Verify firewall rules
+    - Check server logs
+    
+    ```python
+    # Increase timeout
+    client = mcp.ClientSession(
+        server_url="http://localhost:4001",
+        timeout=60.0  # 60 seconds
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Performance Tuning
+
+### Connection Pooling
+
+```python mcp_server.py
+import httpx
+
+# Use connection pooling for HTTP requests
+limits = httpx.Limits(
+    max_keepalive_connections=20,
+    max_connections=100
+)
+
+client = httpx.AsyncClient(limits=limits)
+```
+
+### Caching
+
+```python
+from functools import lru_cache
+import time
+
+@lru_cache(maxsize=100)
+def cached_search(query: str, timestamp: int) -> dict:
+    """Cache search results for 5 minutes."""
+    return web_search(query=query)
+
+# Use with current time bucket
+result = cached_search(
+    query="fastmcp",
+    timestamp=int(time.time() / 300)  # 5-minute buckets
+)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Creating Tools" icon="wrench" href="/tools/creating-tools">
+    Build custom tools for the MCP server
+  </Card>
+  <Card title="MCP Builder Tools" icon="hammer" href="/tools/mcp-builder-tools">
+    Tools for building MCP servers
+  </Card>
+</CardGroup>

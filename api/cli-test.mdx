@@ -1,0 +1,423 @@
+---
+title: 'Test Commands'
+description: 'Run and debug goal-based tests'
+---
+
+## Overview
+
+Hive provides goal-based testing commands to validate agent behavior against success criteria and constraints.
+
+---
+
+## test-run
+
+Run tests for an agent.
+
+```bash
+hive test-run <agent_path> --goal <goal_id> [options]
+```
+
+### Arguments
+
+<ParamField path="agent_path" type="str" required>
+  Path to agent export folder
+</ParamField>
+
+<ParamField path="--goal" type="str" required>
+  Goal ID to run tests for
+</ParamField>
+
+### Options
+
+<ParamField path="--parallel" type="int" default="-1">
+  Number of parallel workers:
+  - `-1`: Auto (use all CPU cores)
+  - `0`: Sequential (no parallelization)
+  - `N`: Use N workers
+  
+  ```bash
+  hive test-run exports/calculator --goal calc-001 --parallel 4
+  ```
+</ParamField>
+
+<ParamField path="--fail-fast" type="flag">
+  Stop on first failure
+  
+  ```bash
+  hive test-run exports/calculator --goal calc-001 --fail-fast
+  ```
+</ParamField>
+
+<ParamField path="--type" type="str" default="all">
+  Type of tests to run: `constraint`, `success`, `edge_case`, `all`
+  
+  ```bash
+  hive test-run exports/calculator --goal calc-001 --type constraint
+  ```
+</ParamField>
+
+### Examples
+
+**Run all tests:**
+```bash
+hive test-run exports/calculator --goal calc-001
+```
+
+**Run constraint tests in parallel:**
+```bash
+hive test-run exports/calculator --goal calc-001 --type constraint --parallel 4
+```
+
+**Sequential execution with fail-fast:**
+```bash
+hive test-run exports/calculator --goal calc-001 --parallel 0 --fail-fast
+```
+
+### Output
+
+```
+Running: pytest exports/calculator/tests -v
+
+================================ test session starts =================================
+collected 12 items
+
+tests/test_constraints.py::test_constraint_no_crash PASSED                  [  8%]
+tests/test_constraints.py::test_constraint_timeout PASSED                   [ 16%]
+tests/test_success_criteria.py::test_accuracy_basic PASSED                  [ 25%]
+tests/test_success_criteria.py::test_accuracy_complex FAILED                [ 33%]
+...
+
+============================== 11 passed, 1 failed in 5.2s ===========================
+```
+
+**Exit code:**
+- `0`: All tests passed
+- `1`: Some tests failed
+
+---
+
+## test-debug
+
+Debug a failed test by re-running with verbose output.
+
+```bash
+hive test-debug <agent_path> <test_name> [options]
+```
+
+### Arguments
+
+<ParamField path="agent_path" type="str" required>
+  Path to agent export folder (e.g., `exports/my_agent`)
+</ParamField>
+
+<ParamField path="test_name" type="str" required>
+  Name of the test function (e.g., `test_constraint_foo`)
+</ParamField>
+
+### Options
+
+<ParamField path="--goal" type="str">
+  Goal ID (optional, for display only)
+</ParamField>
+
+### Examples
+
+**Debug a failed test:**
+```bash
+hive test-debug exports/calculator test_constraint_no_crash
+```
+
+**With goal context:**
+```bash
+hive test-debug exports/calculator test_constraint_no_crash --goal calc-001
+```
+
+### Output
+
+```
+Running: pytest exports/calculator/tests/test_constraints.py::test_constraint_no_crash -vvs --tb=long
+
+================================ test session starts =================================
+
+tests/test_constraints.py::test_constraint_no_crash 
+Test input: {"expression": "1/0"}
+Expected: Should handle gracefully without crash
+
+[INFO] Executing node: input_parser
+[INFO] Input: {"expression": "1/0"}
+[INFO] Tool call: parse_expression(expression="1/0")
+[ERROR] Division by zero detected
+[INFO] Output: {"error": "Invalid expression"}
+
+[INFO] Executing node: error_handler
+[INFO] Input: {"error": "Invalid expression"}
+[INFO] Output: {"result": "Error: Invalid expression"}
+
+FAILED
+
+================================== FAILURES ==========================================
+_________________________ test_constraint_no_crash _______________________________
+
+AssertionError: Expected error message format, got: 'Error: Invalid expression'
+Expected pattern: 'Error: Division by zero'
+
+...
+```
+
+**Exit code:**
+- `0`: Test passed
+- `1`: Test failed
+
+---
+
+## test-list
+
+List tests for an agent by scanning test files.
+
+```bash
+hive test-list <agent_path> [options]
+```
+
+### Arguments
+
+<ParamField path="agent_path" type="str" required>
+  Path to agent export folder (e.g., `exports/my_agent`)
+</ParamField>
+
+### Options
+
+<ParamField path="--type" type="str" default="all">
+  Filter by test type: `constraint`, `success`, `edge_case`, `all`
+</ParamField>
+
+### Examples
+
+**List all tests:**
+```bash
+hive test-list exports/calculator
+```
+
+**List constraint tests only:**
+```bash
+hive test-list exports/calculator --type constraint
+```
+
+### Output
+
+```
+Tests in exports/calculator/tests:
+
+  [CONSTRAINT] (5 tests)
+    test_constraint_no_crash - Ensure no crashes on invalid input
+        test_constraints.py:12
+    test_constraint_timeout - Ensure completion within 5 seconds
+        test_constraints.py:24
+    test_constraint_safe_eval - Ensure no dangerous eval calls
+        test_constraints.py:36
+    test_constraint_error_format - Error messages follow format
+        test_constraints.py:48
+    test_constraint_input_validation - Validate all inputs
+        test_constraints.py:60
+
+  [SUCCESS] (4 tests)
+    async test_accuracy_basic - Basic arithmetic accuracy
+        test_success_criteria.py:15
+    async test_accuracy_complex - Complex expression accuracy
+        test_success_criteria.py:28
+    async test_accuracy_edge_cases - Edge case handling
+        test_success_criteria.py:41
+    test_response_time - Response time under 1 second
+        test_success_criteria.py:54
+
+  [EDGE_CASE] (3 tests)
+    test_division_by_zero - Handle division by zero
+        test_edge_cases.py:10
+    test_very_large_numbers - Handle numbers > 10^9
+        test_edge_cases.py:22
+    test_empty_input - Handle empty input
+        test_edge_cases.py:34
+
+Total: 12 tests
+
+Run with: pytest exports/calculator/tests -v
+```
+
+---
+
+## test-stats
+
+Show test statistics for an agent.
+
+```bash
+hive test-stats <agent_path>
+```
+
+### Arguments
+
+<ParamField path="agent_path" type="str" required>
+  Path to agent export folder (e.g., `exports/my_agent`)
+</ParamField>
+
+### Examples
+
+```bash
+hive test-stats exports/calculator
+```
+
+### Output
+
+```
+Test Statistics for exports/calculator:
+
+  Total tests: 12
+
+  By type:
+    constraint: 5
+    success: 4
+    edge_case: 3
+
+  Async tests: 2/12
+
+  Test files (3):
+    test_constraints.py (5 tests)
+    test_success_criteria.py (4 tests)
+    test_edge_cases.py (3 tests)
+
+Run all tests: pytest exports/calculator/tests -v
+```
+
+---
+
+## Test File Structure
+
+Tests are organized in the agent's `tests/` directory:
+
+```
+my_agent/
+  └── tests/
+      ├── conftest.py              # Pytest configuration
+      ├── test_constraints.py      # Constraint validation tests
+      ├── test_success_criteria.py # Success criteria tests
+      └── test_edge_cases.py       # Edge case tests
+```
+
+### Test Types
+
+**Constraint Tests** (`test_constraints.py`):
+- Validate hard/soft constraints
+- Check boundary conditions
+- Verify safety requirements
+
+**Success Criteria Tests** (`test_success_criteria.py`):
+- Validate success criteria are met
+- Check accuracy, quality, completeness
+- Measure performance metrics
+
+**Edge Case Tests** (`test_edge_cases.py`):
+- Test unusual inputs
+- Verify error handling
+- Check boundary conditions
+
+---
+
+## Writing Tests
+
+Tests use standard pytest syntax:
+
+```python
+import pytest
+from framework.runner import AgentRunner
+
+@pytest.fixture
+def runner():
+    """Load the agent for testing."""
+    return AgentRunner.load("path/to/agent")
+
+def test_constraint_no_crash(runner):
+    """Ensure agent handles invalid input without crashing."""
+    result = await runner.run({"expression": "1/0"})
+    
+    # Should not crash
+    assert result.success or result.error is not None
+    
+    # Should return error message
+    assert "error" in result.output or "Error" in str(result.output)
+
+async def test_accuracy_basic(runner):
+    """Test basic arithmetic accuracy."""
+    result = await runner.run({"expression": "2 + 3"})
+    
+    assert result.success
+    assert result.output["result"] == 5
+```
+
+---
+
+## Requirements
+
+The testing commands require `pytest` to be installed:
+
+```bash
+pip install 'framework[testing]'
+# or
+uv pip install 'framework[testing]'
+```
+
+If pytest is not installed, you'll see:
+
+```
+Error: pytest is not installed or not on PATH.
+Hive's testing commands require pytest at runtime.
+Install it with:
+
+  pip install 'framework[testing]'
+
+or if using uv:
+
+  uv pip install 'framework[testing]'
+```
+
+---
+
+## CI/CD Integration
+
+### GitHub Actions
+
+```yaml
+name: Test Agent
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: pip install 'framework[testing]'
+      - run: hive test-run exports/my_agent --goal my-goal-001 --parallel auto
+```
+
+### GitLab CI
+
+```yaml
+test-agent:
+  image: python:3.11
+  script:
+    - pip install 'framework[testing]'
+    - hive test-run exports/my_agent --goal my-goal-001 --parallel auto
+```
+
+---
+
+## Exit Codes
+
+<ResponseField name="0" type="int">
+  All tests passed
+</ResponseField>
+
+<ResponseField name="1" type="int">
+  Some tests failed, or pytest not installed
+</ResponseField>

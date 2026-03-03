@@ -1,0 +1,567 @@
+---
+title: Troubleshooting Guide
+description: Common issues and solutions for the Hive agent framework
+---
+
+This guide covers common issues you might encounter when working with Hive and how to resolve them.
+
+## Installation Issues
+
+<AccordionGroup>
+  <Accordion title="pip install -e . doesn't work" icon="circle-exclamation" defaultOpen>
+    **Problem:** Running `pip install -e .` creates a placeholder package and Hive doesn't function correctly.
+    
+    **Solution:** Hive uses a `uv` workspace layout and is NOT installed with pip. Use the quickstart script instead:
+    
+    ```bash
+    ./quickstart.sh
+    ```
+    
+    <Warning>
+    Never use `pip install` to install Hive. Always use the quickstart script.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Python version incompatibility">
+    **Problem:** Errors related to Python version or syntax.
+    
+    **Solution:** Hive requires Python 3.11 or higher. Check your version:
+    
+    ```bash
+    python --version
+    ```
+    
+    If you have an older version, install Python 3.11+ and ensure it's in your PATH.
+  </Accordion>
+
+  <Accordion title="Windows installation issues">
+    **Problem:** Scripts fail to run on native Windows.
+    
+    **Solution:** Use WSL (Windows Subsystem for Linux) or Git Bash. If you must use native Windows:
+    
+    1. Run PowerShell or Git Bash as administrator
+    2. Ensure Python 3.11+ is installed
+    3. Disable "App Execution Aliases" in Windows settings:
+       - Settings → Apps → Advanced app settings → App execution aliases
+       - Turn off aliases for Python
+    
+    <Tip>
+    WSL is the recommended approach for Windows users as it provides the most reliable experience.
+    </Tip>
+  </Accordion>
+
+  <Accordion title="uv command not found">
+    **Problem:** The `uv` command is not recognized.
+    
+    **Solution:** The quickstart script installs `uv`. If it's missing:
+    
+    ```bash
+    # Install uv
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    
+    # Add to PATH (add to ~/.bashrc or ~/.zshrc)
+    export PATH="$HOME/.cargo/bin:$PATH"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Credentials & Authentication
+
+<AccordionGroup>
+  <Accordion title="API key not configured" icon="key">
+    **Problem:** Errors like "API key not configured" or "credentials not found".
+    
+    **Solution:** Run the interactive credential setup:
+    
+    ```bash
+    hive setup-credentials
+    ```
+    
+    Or manually add credentials to `~/.hive/credentials` (encrypted) or environment variables:
+    
+    ```bash
+    export ANTHROPIC_API_KEY="your-key-here"
+    export OPENAI_API_KEY="your-key-here"
+    ```
+  </Accordion>
+
+  <Accordion title="OAuth token expired or invalid">
+    **Problem:** "Gmail token expired or invalid" or similar OAuth errors.
+    
+    **Solution:** Re-authorize the integration:
+    
+    1. Visit [hive.adenhq.com](https://hive.adenhq.com)
+    2. Navigate to the integrations page
+    3. Re-connect the service (Gmail, Google Docs, etc.)
+    
+    For Claude Code subscriptions:
+    
+    ```json
+    // ~/.hive/configuration.json
+    {
+      "use_claude_code_subscription": true
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Credential store encryption errors">
+    **Problem:** Errors reading or writing to the encrypted credential store.
+    
+    **Solution:** Check permissions and encryption key:
+    
+    ```bash
+    # Check directory permissions
+    ls -la ~/.hive/
+    
+    # If corrupted, backup and reset
+    mv ~/.hive/credentials ~/.hive/credentials.backup
+    hive setup-credentials
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Agent Execution Issues
+
+<AccordionGroup>
+  <Accordion title="Agent hangs or doesn't respond" icon="spinner">
+    **Problem:** Agent execution appears stuck.
+    
+    **Possible causes & solutions:**
+    
+    1. **Waiting for user input (HITL node):**
+       - Check if the agent is waiting for human-in-the-loop input
+       - Respond to the prompt or cancel the execution
+    
+    2. **LLM API timeout:**
+       - Check your internet connection
+       - Verify API keys are valid
+       - Check LLM provider status page
+    
+    3. **Infinite loop:**
+       - Check `max_node_visits` configuration
+       - Review node edge conditions
+       - Set a max visits limit:
+       ```python
+       NodeSpec(id="my-node", max_node_visits=10, ...)
+       ```
+  </Accordion>
+
+  <Accordion title="Deprecated node type errors">
+    **Problem:** `RuntimeError: Deprecated node type 'llm_tool_use'`
+    
+    **Solution:** Migrate to `event_loop` node type (v0.5.1+):
+    
+    ```python
+    # Before (v0.5.0)
+    NodeSpec(node_type="llm_tool_use", ...)
+    
+    # After (v0.5.1)
+    NodeSpec(node_type="event_loop", ...)
+    # or omit (event_loop is now the default)
+    NodeSpec(...)
+    ```
+    
+    Other deprecated types to migrate:
+    - `llm_generate` → `event_loop`
+    - `function` → `event_loop` with tools
+    - `router` → `event_loop` with conditional edges
+    - `human_input` → HITL in event_loop
+  </Accordion>
+
+  <Accordion title="Tool not found or not loaded">
+    **Problem:** Agent can't access a required tool.
+    
+    **Solution:**
+    
+    1. **Check MCP server configuration:**
+       ```json
+       // mcp_servers.json
+       {
+         "hive-tools": {
+           "command": "uv",
+           "args": ["run", "python", "mcp_server.py", "--stdio"],
+           "workdir": "tools"
+         }
+       }
+       ```
+    
+    2. **Verify tool is listed:**
+       ```bash
+       hive info agent-name
+       ```
+    
+    3. **Check tool credentials:**
+       - Some tools require API keys (e.g., `GOOGLE_MAPS_API_KEY`)
+       - Run `hive setup-credentials` to configure
+  </Accordion>
+
+  <Accordion title="Memory or state issues">
+    **Problem:** Agent loses context or state between nodes.
+    
+    **Solution:** Check isolation levels:
+    
+    ```python
+    # In agent.py or config.py
+    RuntimeConfig(
+        isolation_level=IsolationLevel.SHARED,  # or ISOLATED, SYNCHRONIZED
+        ...
+    )
+    ```
+    
+    - **ISOLATED:** Each execution has its own state
+    - **SHARED:** State shared across executions in same session
+    - **SYNCHRONIZED:** Thread-safe shared state
+  </Accordion>
+
+  <Accordion title="Graph execution fails with null output">
+    **Problem:** Node fails with "required output key not set".
+    
+    **Solution:** Ensure nodes set all required output keys:
+    
+    ```python
+    NodeSpec(
+        id="my-node",
+        output_keys=["result"],  # This key MUST be set by the node
+        ...
+    )
+    ```
+    
+    In the node implementation, always set output keys:
+    ```python
+    state.set("result", "value")
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Testing Issues
+
+<AccordionGroup>
+  <Accordion title="Tests fail with import errors" icon="flask">
+    **Problem:** `ModuleNotFoundError` when running tests.
+    
+    **Solution:** Set PYTHONPATH correctly:
+    
+    ```bash
+    # For agents in exports/
+    PYTHONPATH=exports uv run python -m agent_name test
+    
+    # For core framework tests
+    cd core && pytest tests/ -v
+    
+    # For tools tests
+    cd tools && uv run pytest tests/ -v
+    ```
+  </Accordion>
+
+  <Accordion title="Test timeouts">
+    **Problem:** Tests hang or timeout.
+    
+    **Solution:**
+    
+    1. **Increase timeout:**
+       ```python
+       # In conftest.py or test file
+       @pytest.mark.timeout(300)  # 5 minutes
+       def test_my_agent():
+           ...
+       ```
+    
+    2. **Use mock mode:**
+       ```bash
+       uv run python -m agent_name test --mock
+       ```
+    
+    3. **Check for forever-alive agents:**
+       - Forever-alive agents need special test structure
+       - Don't call `runner.run()` directly in tests
+       - Use `runner.start()` and `runner.stop()` instead
+  </Accordion>
+
+  <Accordion title="LLM judge evaluation failures">
+    **Problem:** Level 2 (LLM judge) tests fail unexpectedly.
+    
+    **Solution:**
+    
+    1. **Check success criteria:**
+       ```python
+       Goal(
+           success_criteria=[
+               SuccessCriterion(
+                   description="Clear description of what success looks like",
+                   weight=1.0,
+                   metric="llm_judge",  # or output_contains, output_equals
+               )
+           ]
+       )
+       ```
+    
+    2. **Review conversation history:**
+       ```bash
+       # Check logs for full context
+       cat ~/.hive/sessions/<session-id>/logs/*.log
+       ```
+    
+    3. **Adjust threshold:**
+       - Default threshold is 90% weighted score
+       - May need to adjust criteria weights
+  </Accordion>
+</AccordionGroup>
+
+## Performance Issues
+
+<AccordionGroup>
+  <Accordion title="Slow agent execution" icon="gauge-high">
+    **Problem:** Agent takes too long to execute.
+    
+    **Possible optimizations:**
+    
+    1. **Reduce max_tokens:**
+       ```python
+       RuntimeConfig(
+           default_model="claude-sonnet-4.5",  # Faster than opus
+           max_tokens=8192,  # Lower if appropriate
+       )
+       ```
+    
+    2. **Use faster models:**
+       - Sonnet 4.5 is faster than Opus 4.6
+       - Consider using different models for different nodes
+    
+    3. **Enable parallel execution:**
+       ```python
+       RuntimeConfig(
+           max_concurrent_executions=5,
+       )
+       ```
+    
+    4. **Review node prompts:**
+       - Shorter, clearer prompts = faster responses
+       - Remove unnecessary context
+  </Accordion>
+
+  <Accordion title="High memory usage">
+    **Problem:** Agent consumes excessive memory.
+    
+    **Solution:**
+    
+    1. **Enable checkpoint cleanup:**
+       ```python
+       # In config
+       checkpoint_store_max_age=3600  # 1 hour
+       ```
+    
+    2. **Limit conversation history:**
+       - Conversation memory grows with each interaction
+       - Consider implementing memory compaction (roadmap item)
+    
+    3. **Check for memory leaks:**
+       ```bash
+       # Monitor memory usage
+       top -p $(pgrep -f "python.*agent")
+       ```
+  </Accordion>
+
+  <Accordion title="Rate limit errors">
+    **Problem:** "Rate limit exceeded" from LLM provider.
+    
+    **Solution:**
+    
+    1. **Add retry logic (built-in for most tools):**
+       - Most Hive tools handle rate limits automatically
+       - Wait and retry
+    
+    2. **Reduce concurrent executions:**
+       ```python
+       RuntimeConfig(
+           max_concurrent_executions=1,  # Sequential execution
+       )
+       ```
+    
+    3. **Use different API keys:**
+       - Distribute load across multiple keys if available
+  </Accordion>
+</AccordionGroup>
+
+## TUI (Terminal UI) Issues
+
+<AccordionGroup>
+  <Accordion title="TUI doesn't display properly" icon="terminal">
+    **Problem:** Text formatting issues or garbled display.
+    
+    **Solution:**
+    
+    1. **Check terminal compatibility:**
+       - Use a modern terminal (iTerm2, Alacritty, Windows Terminal)
+       - Ensure 256-color support:
+       ```bash
+       echo $TERM  # Should be xterm-256color or similar
+       ```
+    
+    2. **Update terminal:**
+       ```bash
+       # macOS
+       brew upgrade iterm2
+       
+       # Ubuntu/Debian
+       sudo apt update && sudo apt upgrade
+       ```
+  </Accordion>
+
+  <Accordion title="Can't load agent in TUI">
+    **Problem:** Agent picker doesn't show agents or load fails.
+    
+    **Solution:**
+    
+    1. **Check agent structure:**
+       ```bash
+       # Agent must have agent.json
+       ls exports/my_agent/agent.json
+       ```
+    
+    2. **Validate agent definition:**
+       ```bash
+       hive validate exports/my_agent
+       ```
+    
+    3. **Check for errors:**
+       ```bash
+       hive info exports/my_agent
+       ```
+  </Accordion>
+
+  <Accordion title="Streaming output not showing">
+    **Problem:** Live streaming pane doesn't update.
+    
+    **Solution:**
+    
+    - Ensure you're using v0.5.1+ (streaming pane added in v0.5.1)
+    - Check that the model supports streaming
+    - Some tools may buffer output
+  </Accordion>
+</AccordionGroup>
+
+## Docker & Deployment Issues
+
+<AccordionGroup>
+  <Accordion title="Docker build fails" icon="docker">
+    **Problem:** Docker image build errors.
+    
+    **Solution:**
+    
+    1. **Check Dockerfile location:**
+       ```bash
+       ls tools/Dockerfile
+       ```
+    
+    2. **Build with verbose output:**
+       ```bash
+       docker build -t hive:latest -f tools/Dockerfile . --progress=plain
+       ```
+    
+    3. **Check Docker version:**
+       ```bash
+       docker --version  # Should be 20.10+
+       ```
+  </Accordion>
+
+  <Accordion title="Playwright/Chromium issues in Docker">
+    **Problem:** Browser automation fails in Docker.
+    
+    **Solution:**
+    
+    1. **Ensure dependencies are installed:**
+       - Dockerfile includes Playwright Chromium
+       - Check the official Dockerfile in `tools/`
+    
+    2. **Run in headless mode:**
+       - Docker requires headless browser execution
+       - This is the default for Playwright tools
+  </Accordion>
+
+  <Accordion title="Webhook server not accessible">
+    **Problem:** Can't trigger agent via webhook.
+    
+    **Solution:**
+    
+    1. **Check port mapping:**
+       ```bash
+       docker run -p 8000:8000 hive:latest
+       ```
+    
+    2. **Verify webhook configuration:**
+       ```python
+       AsyncEntryPointSpec(
+           name="webhook",
+           type=EntryPointType.WEBHOOK,
+           config={"route": "/trigger", "secret": "your-secret"},
+       )
+       ```
+    
+    3. **Test locally:**
+       ```bash
+       curl -X POST http://localhost:8000/trigger \
+         -H "Content-Type: application/json" \
+         -d '{"your": "data"}'
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Debugging Tips
+
+<CardGroup cols={2}>
+  <Card title="Enable Verbose Logging" icon="list">
+    ```python
+    RuntimeConfig(
+        log_level="DEBUG",
+    )
+    ```
+    
+    Check logs in `~/.hive/sessions/<session-id>/logs/`
+  </Card>
+
+  <Card title="Inspect Session State" icon="magnifying-glass">
+    ```bash
+    # List all sessions
+    ls ~/.hive/sessions/
+    
+    # View session logs
+    cat ~/.hive/sessions/<session-id>/logs/*.log
+    
+    # Check checkpoints
+    ls ~/.hive/sessions/<session-id>/checkpoints/
+    ```
+  </Card>
+
+  <Card title="Use Mock Mode" icon="vial">
+    ```bash
+    # Test agent without calling real APIs
+    uv run python -m agent_name run --mock
+    ```
+  </Card>
+
+  <Card title="Check Event Bus" icon="tower-broadcast">
+    Enable event bus logging to see all agent events:
+    
+    ```python
+    # Subscribe to all events
+    event_bus.subscribe(
+        EventType.ALL,
+        callback=lambda e: print(f"Event: {e.type} - {e.data}")
+    )
+    ```
+  </Card>
+</CardGroup>
+
+## Still Need Help?
+
+<CardGroup cols={3}>
+  <Card title="Join Discord" icon="discord" href="https://discord.com/invite/MXE49hrKDk">
+    Get help from the community
+  </Card>
+  <Card title="Open an Issue" icon="github" href="https://github.com/adenhq/hive/issues">
+    Report bugs or request features
+  </Card>
+  <Card title="Read the Docs" icon="book" href="https://docs.adenhq.com">
+    Complete documentation
+  </Card>
+</CardGroup>

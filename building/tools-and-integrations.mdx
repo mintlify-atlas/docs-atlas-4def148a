@@ -1,0 +1,491 @@
+---
+title: Tools & Integrations
+description: Add tools and external integrations to your agents
+---
+
+# Tools & Integrations
+
+Tools extend agent capabilities by providing access to external services, APIs, and operations. Hive uses the Model Context Protocol (MCP) for tool integration.
+
+## Tool Discovery
+
+Tools are discovered from three sources:
+
+1. **MCP Servers** - External tool providers (recommended)
+2. **Built-in Tools** - Framework-provided tools
+3. **Custom Tools** - Agent-specific tools in `tools.py`
+
+## MCP Server Configuration
+
+Define MCP servers in `mcp_servers.json`:
+
+```json
+{
+  "servers": [
+    {
+      "name": "hive-tools",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["hive-tools"],
+      "description": "Core framework tools"
+    },
+    {
+      "name": "filesystem",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/workspace"],
+      "description": "File operations"
+    }
+  ]
+}
+```
+
+### Server Configuration
+
+**Required fields:**
+- `name` - Unique server identifier
+- `transport` - `"stdio"` or `"http"`
+- `command` - Command to run (for stdio)
+
+**Optional fields:**
+- `args` - Command arguments
+- `env` - Environment variables
+- `cwd` - Working directory
+- `description` - Human-readable description
+
+**HTTP transport:**
+```json
+{
+  "name": "remote-api",
+  "transport": "http",
+  "url": "https://api.example.com/mcp",
+  "headers": {
+    "Authorization": "Bearer ${API_TOKEN}"
+  }
+}
+```
+
+## Tool Registry
+
+The `ToolRegistry` manages tool discovery and execution:
+
+```python
+from framework.runner.tool_registry import ToolRegistry
+from pathlib import Path
+
+# Create registry
+registry = ToolRegistry()
+
+# Load MCP servers from config
+mcp_config = Path("mcp_servers.json")
+registry.load_mcp_config(mcp_config)
+
+# Get available tools
+tools = registry.get_tools()  # dict[str, Tool]
+print(f"Loaded {len(tools)} tools")
+
+# Get tool executor
+executor = registry.get_executor()  # Unified executor function
+```
+
+## Built-in Framework Tools
+
+The framework provides core tools:
+
+### File Operations
+
+```python
+# Tools available when data_dir is configured
+"save_data"     # Save data to file
+"load_data"     # Load data from file
+"list_data"     # List files in data directory
+"delete_data"   # Delete file
+"edit_data"     # Edit file content
+```
+
+Example usage in a node:
+```python
+NodeSpec(
+    id="researcher",
+    tools=["save_data", "load_data"],
+    system_prompt="""
+Save your findings using save_data("findings.json", {...}).
+Load previous findings with load_data("findings.json").
+""",
+)
+```
+
+### Synthetic Tools
+
+Framework-injected tools:
+
+**set_output** - Set output keys (auto-generated per node):
+```python
+# Generated based on node's output_keys
+{
+  "name": "set_output",
+  "description": "Set output values for this node",
+  "parameters": {
+    "result": "The result value",
+    "metadata": "Optional metadata"
+  }
+}
+```
+
+**ask_user** - Request user input (client-facing nodes only):
+```python
+{
+  "name": "ask_user",
+  "description": "Ask the user a question and wait for response",
+  "parameters": {
+    "question": "Question to ask the user"
+  }
+}
+```
+
+**delegate_to_sub_agent** - Delegate to subagent:
+```python
+{
+  "name": "delegate_to_sub_agent",
+  "description": "Delegate a task to a specialized subagent",
+  "parameters": {
+    "sub_agent_id": "specialist node ID",
+    "task": "Task description",
+    "context": "Additional context"
+  }
+}
+```
+
+## Custom Tools
+
+Create custom tools in `tools.py`:
+
+### Method 1: Tool Dictionary
+
+```python
+from framework.llm.provider import Tool, ToolUse, ToolResult
+import json
+
+# Define tools
+TOOLS = {
+    "calculate": Tool(
+        name="calculate",
+        description="Perform mathematical calculations",
+        parameters={
+            "type": "object",
+            "properties": {
+                "expression": {
+                    "type": "string",
+                    "description": "Mathematical expression to evaluate"
+                }
+            },
+            "required": ["expression"]
+        }
+    ),
+    "format_output": Tool(
+        name="format_output",
+        description="Format output as JSON or plain text",
+        parameters={
+            "type": "object",
+            "properties": {
+                "data": {"type": "object"},
+                "format": {"type": "string", "enum": ["json", "text"]}
+            },
+            "required": ["data", "format"]
+        }
+    )
+}
+
+# Unified executor
+def tool_executor(tool_use: ToolUse) -> ToolResult:
+    if tool_use.name == "calculate":
+        try:
+            result = eval(tool_use.input["expression"])
+            return ToolResult(
+                tool_use_id=tool_use.id,
+                content=json.dumps({"result": result}),
+                is_error=False
+            )
+        except Exception as e:
+            return ToolResult(
+                tool_use_id=tool_use.id,
+                content=json.dumps({"error": str(e)}),
+                is_error=True
+            )
+    
+    elif tool_use.name == "format_output":
+        data = tool_use.input["data"]
+        format_type = tool_use.input["format"]
+        
+        if format_type == "json":
+            result = json.dumps(data, indent=2)
+        else:
+            result = str(data)
+        
+        return ToolResult(
+            tool_use_id=tool_use.id,
+            content=json.dumps({"formatted": result}),
+            is_error=False
+        )
+    
+    return ToolResult(
+        tool_use_id=tool_use.id,
+        content=json.dumps({"error": "Unknown tool"}),
+        is_error=True
+    )
+```
+
+### Method 2: Decorator Pattern
+
+```python
+from framework.runner.tool_registry import tool
+
+@tool(description="Fetch weather data for a location")
+def get_weather(location: str, units: str = "celsius") -> dict:
+    """Fetch weather data."""
+    # Implementation
+    return {
+        "location": location,
+        "temperature": 22,
+        "units": units
+    }
+
+@tool(description="Send notification")
+def send_notification(message: str, priority: str = "normal") -> dict:
+    """Send a notification."""
+    # Implementation
+    return {"sent": True, "message_id": "12345"}
+```
+
+The registry auto-discovers decorated functions.
+
+## Tool Discovery in Agents
+
+```python
+from framework.runner.tool_registry import ToolRegistry
+from pathlib import Path
+
+class MyAgent:
+    def _setup(self):
+        registry = ToolRegistry()
+        
+        # 1. Load MCP servers
+        mcp_config = Path(__file__).parent / "mcp_servers.json"
+        if mcp_config.exists():
+            registry.load_mcp_config(mcp_config)
+        
+        # 2. Load custom tools from tools.py
+        tools_module = Path(__file__).parent / "tools.py"
+        if tools_module.exists():
+            count = registry.discover_from_module(tools_module)
+            print(f"Loaded {count} custom tools")
+        
+        # 3. Get tools for runtime
+        self.tools = list(registry.get_tools().values())
+        self.tool_executor = registry.get_executor()
+```
+
+## Session Context for Tools
+
+Inject context into tool calls:
+
+```python
+registry = ToolRegistry()
+
+# Set session-wide context
+registry.set_session_context(
+    workspace_id="workspace-123",
+    agent_id="my-agent",
+    session_id="session-456",
+    data_dir="/path/to/data"
+)
+
+# Context params are auto-injected into tool calls
+# The LLM doesn't see these parameters - they're added at execution time
+```
+
+### Execution Context (Concurrency-Safe)
+
+For per-execution overrides:
+
+```python
+# Each async task gets isolated context
+token = ToolRegistry.set_execution_context(
+    session_id="session-789",  # Overrides session context
+)
+
+try:
+    # Execute with overridden context
+    result = tool_executor(tool_use)
+finally:
+    ToolRegistry.reset_execution_context(token)
+```
+
+## MCP Credential Management
+
+Some MCP tools require credentials:
+
+### Credential Storage
+
+Credentials are stored in:
+```
+~/.hive/credentials/credentials/
+```
+
+### Automatic Credential Injection
+
+The registry automatically injects credentials for known providers:
+
+```python
+# Framework-internal context keys
+CONTEXT_PARAMS = frozenset({
+    "workspace_id",
+    "agent_id",
+    "session_id",
+    "data_dir"
+})
+
+# These are stripped from LLM-facing schemas
+# and auto-injected at call time
+```
+
+### Dynamic Credential Resync
+
+When credentials change mid-session:
+
+```python
+registry = ToolRegistry()
+registry.load_mcp_config("mcp_servers.json")
+
+# Later, if credentials are added/updated:
+if registry.resync_mcp_servers_if_needed():
+    print("MCP servers resynced with new credentials")
+```
+
+## Tool Filtering by Provider
+
+Filter tools by OAuth provider:
+
+```python
+registry = ToolRegistry()
+registry.build_provider_index()  # Build provider mapping
+
+# Get tools for specific provider
+github_tools = registry.get_by_provider("github")
+slack_tools = registry.get_by_provider("slack")
+
+# Get all provider-connected tools
+all_provider_tools = registry.get_all_provider_tool_names()
+```
+
+## Async Tools
+
+Tools can be async:
+
+```python
+def my_tool_executor(inputs: dict):
+    async def fetch_data():
+        # Async implementation
+        await asyncio.sleep(1)
+        return {"data": "result"}
+    
+    # Return coroutine - executor will await it
+    return fetch_data()
+```
+
+The framework automatically handles async execution.
+
+## Real-World Example
+
+Complete tool setup for a research agent:
+
+```python
+from pathlib import Path
+from framework.runner.tool_registry import ToolRegistry
+
+class ResearchAgent:
+    def _setup_tools(self):
+        """Set up tool registry with MCP servers."""
+        registry = ToolRegistry()
+        
+        # Load MCP configuration
+        mcp_config = Path(__file__).parent / "mcp_servers.json"
+        if mcp_config.exists():
+            registry.load_mcp_config(mcp_config)
+        
+        # Set session context for file operations
+        data_dir = self._storage_path / "data"
+        data_dir.mkdir(exist_ok=True)
+        
+        registry.set_session_context(
+            agent_id="research-agent",
+            data_dir=str(data_dir),
+        )
+        
+        # Load custom tools if present
+        tools_file = Path(__file__).parent / "tools.py"
+        if tools_file.exists():
+            registry.discover_from_module(tools_file)
+        
+        return registry
+```
+
+**mcp_servers.json:**
+```json
+{
+  "servers": [
+    {
+      "name": "hive-tools",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["hive-tools"],
+      "description": "Core framework tools for file operations"
+    },
+    {
+      "name": "brave-search",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+      },
+      "description": "Web search via Brave Search API"
+    }
+  ]
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use MCP for External Integrations">
+    Prefer MCP servers over custom tools for external services. MCP provides standardized interfaces and automatic credential management.
+  </Accordion>
+  
+  <Accordion title="Keep Tool Names Descriptive">
+    Use clear, action-oriented names: `web_search`, `fetch_url`, `save_data`. Avoid abbreviations.
+  </Accordion>
+  
+  <Accordion title="Validate Tool Inputs">
+    Use JSON Schema in tool parameters to validate inputs before execution.
+  </Accordion>
+  
+  <Accordion title="Handle Errors Gracefully">
+    Return `ToolResult` with `is_error=True` and descriptive error messages. Never raise unhandled exceptions.
+  </Accordion>
+  
+  <Accordion title="Use Session Context for Paths">
+    Inject `data_dir` via session context instead of hardcoding paths. This makes tools work across different agent instances.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Testing Agents" icon="flask" href="/building/testing-agents">
+    Test tool integrations and agent behavior
+  </Card>
+  <Card title="MCP Protocol" icon="plug" href="https://modelcontextprotocol.io">
+    Learn more about the Model Context Protocol
+  </Card>
+</CardGroup>

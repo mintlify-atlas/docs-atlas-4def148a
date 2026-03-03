@@ -1,122 +1,165 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Hive",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#ff9800",
+    "light": "#ffbe42",
+    "dark": "#ed8c00"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/aden-hive/hive"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/aden-hive/hive",
+      "discord": "https://discord.com/invite/MXE49hrKDk",
+      "x": "https://x.com/aden_hq",
+      "linkedin": "https://www.linkedin.com/company/teamaden/"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "installation"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/goals-and-outcomes",
+              "concepts/agent-graphs",
+              "concepts/worker-agents",
+              "concepts/evolution",
+              "concepts/human-in-the-loop"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Building Agents",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "building/creating-agents",
+              "building/defining-goals",
+              "building/node-configuration",
+              "building/tools-and-integrations",
+              "building/testing-agents"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Runtime & Execution",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "runtime/sessions",
+              "runtime/headless-execution",
+              "runtime/monitoring",
+              "runtime/cost-tracking",
+              "runtime/crash-recovery"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/self-hosting",
+              "guides/credential-management",
+              "guides/mcp-integration",
+              "guides/llm-providers",
+              "guides/browser-automation"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Tools & Integrations",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Overview",
             "pages": [
-              "api-reference/introduction"
+              "tools/overview",
+              "tools/creating-tools"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Built-in Tools",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "tools/file-system",
+              "tools/web-search",
+              "tools/communication",
+              "tools/productivity",
+              "tools/cloud-apis",
+              "tools/security"
+            ]
+          },
+          {
+            "group": "MCP Integration",
+            "pages": [
+              "tools/mcp-server-guide",
+              "tools/mcp-builder-tools"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Framework Core",
+            "pages": [
+              "api/runtime",
+              "api/builder-query",
+              "api/graph",
+              "api/nodes",
+              "api/edges"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "api/goal-schema",
+              "api/agent-config",
+              "api/credentials"
+            ]
+          },
+          {
+            "group": "CLI Commands",
+            "pages": [
+              "api/cli-reference",
+              "api/cli-run",
+              "api/cli-test",
+              "api/cli-tui"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Community",
+            "pages": [
+              "resources/contributing",
+              "resources/examples",
+              "resources/roadmap",
+              "resources/changelog"
+            ]
+          },
+          {
+            "group": "Support",
+            "pages": [
+              "resources/faq",
+              "resources/troubleshooting",
+              "resources/security"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

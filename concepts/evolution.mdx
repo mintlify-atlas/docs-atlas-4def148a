@@ -1,0 +1,310 @@
+---
+title: Evolution
+description: Self-improving agents that learn from failures and adapt across generations
+---
+
+Agents don't just fail; they fail inevitably. Real-world variables—private LinkedIn profiles, shifting API schemas, or LLM hallucinations—are impossible to predict in a vacuum. The first version of any agent is merely a "happy path" draft.
+
+Evolution is how Hive handles this. When an agent fails, the framework captures what went wrong — which node failed, which success criteria weren't met, what the agent tried and why it didn't work. Then a coding agent (Claude Code, Cursor, or similar) uses that failure data to generate an improved version of the agent. The new version gets deployed, runs, encounters new edge cases, and the cycle continues.
+
+Over generations, the agent gets more reliable. Not because someone sat down and anticipated every possible failure, but because each failure teaches the next version something specific.
+
+## Evolution is the mechanism; adaptiveness is the result
+
+<Warning>
+An important distinction: evolution makes agents more adaptive, but not more intelligent in any general sense. The agent isn't learning to reason better — it's being rewritten to handle more situations correctly.
+</Warning>
+
+This is closer to how biological evolution works than how learning works. A species doesn't "learn" to survive winter — individuals that happen to have thicker fur survive, and that trait gets selected for. Similarly, agent versions that handle more edge cases correctly survive in production, and the patterns that made them successful get carried forward.
+
+The practical implication: don't expect evolution to make an agent smarter about problems it's never seen. Evolution improves reliability on the *kinds* of problems the agent has already encountered. For genuinely novel situations, that's what human-in-the-loop is for — and every time a human steps in, that interaction becomes potential fuel for the next evolution cycle.
+
+## How it works
+
+The evolution loop has four stages:
+
+### 1. Execute
+
+The worker agent runs against real inputs. Sessions produce outcomes, decisions, and metrics.
+
+```python core/framework/graph/executor.py
+@dataclass
+class ExecutionResult:
+    """Result of executing a graph."""
+    success: bool
+    output: dict[str, Any]
+    error: str | None = None
+    
+    # Execution quality metrics
+    total_retries: int = 0
+    nodes_with_failures: list[str]
+    retry_details: dict[str, int]  # {node_id: retry_count}
+    had_partial_failures: bool = False
+    execution_quality: str = "clean"  # "clean", "degraded", or "failed"
+```
+
+### 2. Evaluate
+
+The framework checks outcomes against the goal's success criteria and constraints. Did the agent produce the desired result? Which criteria were satisfied and which weren't? Were any constraints violated?
+
+```python core/framework/graph/goal.py
+def is_success(self) -> bool:
+    """Check if all weighted success criteria are met."""
+    if not self.success_criteria:
+        return False
+    
+    total_weight = sum(c.weight for c in self.success_criteria)
+    met_weight = sum(c.weight for c in self.success_criteria if c.met)
+    
+    return met_weight >= total_weight * 0.9  # 90% threshold
+```
+
+### 3. Diagnose
+
+Failure data is structured and specific. It's not just "the agent failed" — it's "node `draft_message` failed to produce personalized content because the research node returned insufficient data about the prospect's recent activity."
+
+The decision log, problem reports, and execution trace provide the full picture:
+
+- Which node failed
+- What it was trying to do (goal context)
+- How many retries it attempted
+- What the judge feedback said on each retry
+- What data was in shared memory at the time
+- What constraints were violated
+- What success criteria weren't met
+
+### 4. Regenerate
+
+A coding agent receives the diagnosis and the current agent code. It modifies the graph — adding nodes, adjusting prompts, changing edge conditions, adding tools — to address the specific failure. The new version is deployed and the cycle restarts.
+
+```python core/framework/graph/goal.py
+class Goal(BaseModel):
+    # Versioning for evolution
+    version: str = "1.0.0"
+    parent_version: str | None = None
+    evolution_reason: str | None = None
+```
+
+## What gets evolved
+
+Evolution can change almost anything about an agent:
+
+### Prompts
+
+The most common fix. A node's system prompt gets refined based on the specific ways the LLM misunderstood its instructions.
+
+```python examples/templates/deep_research_agent/nodes/__init__.py
+research_node = NodeSpec(
+    id="research",
+    system_prompt="""
+You are a research agent. Given a research brief, find and analyze sources.
+
+Work in phases:
+1. **Search**: Use web_search with 3-5 diverse queries.
+2. **Fetch**: Use web_scrape on the most promising URLs.
+3. **Analyze**: Review what you've collected.
+
+Important:
+- Work in batches of 3-4 tool calls at a time
+- After each batch, assess whether you have enough material
+- Prefer quality over quantity
+""",
+)
+```
+
+Evolution might add: "If a URL fails, skip it and try the next one" after observing retry loops on 404 errors.
+
+### Graph structure
+
+Adding a validation node before a critical step, splitting a node that's trying to do too much, adding a fallback path for a common failure mode.
+
+```python
+# Before evolution: linear path
+edges = [
+    EdgeSpec(id="research-to-draft", source="research", target="draft"),
+]
+
+# After evolution: validation node added
+edges = [
+    EdgeSpec(id="research-to-validate", source="research", target="validate_sources"),
+    EdgeSpec(id="validate-to-draft", source="validate_sources", target="draft",
+             condition=EdgeCondition.ON_SUCCESS),
+    EdgeSpec(id="validate-to-research", source="validate_sources", target="research",
+             condition=EdgeCondition.ON_FAILURE),
+]
+```
+
+### Edge conditions
+
+Adjusting routing logic based on observed patterns. If low-confidence research results consistently lead to bad drafts, add a conditional edge that routes them back for another research pass.
+
+```python examples/templates/deep_research_agent/agent.py
+EdgeSpec(
+    id="review-to-research-feedback",
+    source="review",
+    target="research",
+    condition=EdgeCondition.CONDITIONAL,
+    condition_expr="needs_more_research == True",
+    priority=1,
+)
+```
+
+### Tool selection
+
+Swapping in a better tool, adding a new one, or removing one that causes more problems than it solves.
+
+```python
+# Before: single web_search tool
+tools=["web_search"]
+
+# After: added web_scrape after observing search results weren't detailed enough
+tools=["web_search", "web_scrape", "save_data"]
+```
+
+### Constraints and criteria
+
+Tightening or loosening based on what's actually achievable and what matters in practice.
+
+```python
+# Before: unrealistic target
+SuccessCriterion(
+    id="citation-coverage",
+    target="100%",
+    weight=0.4,
+)
+
+# After: adjusted based on observed patterns
+SuccessCriterion(
+    id="citation-coverage",
+    target="95%",
+    weight=0.3,
+)
+```
+
+## The role of decision logging
+
+Evolution depends on good data. The runtime captures every decision an agent makes: what it was trying to do, what options it considered, what it chose, and what happened as a result. This isn't overhead — it's the signal that makes evolution possible.
+
+Without decision logging, failure analysis is guesswork. With it, the coding agent can trace a failure back to its root cause and make a targeted fix rather than a blind change.
+
+```python core/framework/graph/event_loop_node.py
+class JudgeVerdict:
+    """Result of judge evaluation for the event loop."""
+    action: Literal["ACCEPT", "RETRY", "ESCALATE"]
+    feedback: str = ""  # Why this decision was made
+```
+
+Every retry, every escalation, every judge verdict gets logged:
+
+- **Iteration number**: How many attempts before acceptance/failure
+- **Judge feedback**: What was wrong on each retry
+- **Tool calls**: What the agent tried
+- **Memory state**: What data it had access to
+- **Success criteria status**: Which criteria were/weren't met
+
+## Evolution in practice
+
+Here's what a typical evolution cycle looks like:
+
+### Generation 1: Happy path
+
+```python
+# Initial agent: works for straightforward cases
+research_node = NodeSpec(
+    id="research",
+    system_prompt="Search for information and compile findings.",
+    tools=["web_search"],
+)
+```
+
+**Result**: Works 60% of the time. Fails when:
+- Search results don't contain enough detail
+- URLs in search results are dead links
+- Content needs deeper analysis
+
+### Generation 2: Add tools and specificity
+
+```python
+# After observing failures, add web_scrape and refine instructions
+research_node = NodeSpec(
+    id="research",
+    system_prompt="""
+Search for information, fetch detailed content from URLs, and compile findings.
+
+Work in phases:
+1. Use web_search to find relevant sources
+2. Use web_scrape to fetch detailed content
+3. Analyze and synthesize findings
+""",
+    tools=["web_search", "web_scrape"],
+)
+```
+
+**Result**: Works 80% of the time. New failure mode:
+- Agent tries to scrape every URL, including broken ones
+- Gets stuck in retry loops on 404 errors
+
+### Generation 3: Add error handling
+
+```python
+# Add explicit error handling instructions
+research_node = NodeSpec(
+    id="research",
+    system_prompt="""
+...
+
+Important:
+- If a URL fails to scrape, skip it and try the next one
+- Don't retry the same URL more than once
+- Aim for 5-8 successful sources, not exhaustive coverage
+""",
+    tools=["web_search", "web_scrape"],
+)
+```
+
+**Result**: Works 90% of the time. Agent now handles most edge cases gracefully.
+
+## When to trigger evolution
+
+Not every failure needs immediate evolution. Consider evolution when:
+
+<Accordion title="Systematic failures">
+  The same failure pattern appears across multiple sessions (e.g., "research node always fails when topic is technical").
+</Accordion>
+
+<Accordion title="High-frequency issues">
+  Failures that block >20% of sessions in a meaningful way.
+</Accordion>
+
+<Accordion title="Constraint violations">
+  Hard constraints being violated (safety, cost, compliance issues).
+</Accordion>
+
+<Accordion title="Performance degradation">
+  Success rate dropping over time as input distribution shifts.
+</Accordion>
+
+Don't evolve for:
+- One-off failures from bad input data
+- Transient issues (API downtime, rate limits)
+- Failures that humans should handle (genuinely novel situations)
+
+## Evolution vs learning
+
+Evolution is different from in-session learning:
+
+| Aspect | Evolution | In-Session Learning |
+|--------|-----------|---------------------|
+| **Scope** | Across sessions | Within a session |
+| **Mechanism** | Code rewrite | Reflexion/retry |
+| **Speed** | Slow (between sessions) | Fast (real-time) |
+| **Persistence** | Permanent (new version) | Temporary (session only) |
+| **Target** | Recurring patterns | One-off issues |
+
+Both matter. Reflexion (in-session retry) handles bumps in a single run. Evolution handles patterns that keep recurring across many runs.
+
+## The goal: adaptive reliability
+
+The end goal isn't an agent that never fails — it's an agent that fails less over time, in more predictable ways, and that degrades gracefully when it encounters truly novel situations.
+
+Evolution makes agents production-ready not by anticipating every edge case upfront, but by systematically discovering and fixing them as they appear in the wild.

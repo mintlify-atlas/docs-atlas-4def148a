@@ -1,0 +1,372 @@
+---
+title: 'TUI Command'
+description: 'Interactive terminal dashboard'
+---
+
+## Overview
+
+The `hive tui` command launches an interactive terminal user interface (TUI) for monitoring and controlling agent execution.
+
+```bash
+hive tui [options]
+```
+
+---
+
+## Options
+
+<ParamField path="--model" type="str">
+  LLM model to use (any LiteLLM-compatible name)
+  
+  ```bash
+  hive tui --model claude-sonnet-4-20250514
+  ```
+</ParamField>
+
+---
+
+## Features
+
+### Agent Picker
+
+When you launch the TUI without specifying an agent, you get an interactive agent picker:
+
+- Browse available agents in `exports/`
+- See agent descriptions and metadata
+- Select an agent to run
+
+### Live Execution Monitor
+
+Once an agent is loaded:
+
+**Execution View:**
+- Real-time node execution status
+- Current node being processed
+- Execution path visualization
+- Step count and timing
+
+**Conversation Panel:**
+- Live LLM conversations
+- Tool calls and results
+- Decision reasoning
+- Input/output for each node
+
+**Status Bar:**
+- Current status (running, paused, completed, failed)
+- Token usage
+- Execution time
+- Model being used
+
+### Interactive Input
+
+The TUI includes a chat-style interface:
+
+- Enter input naturally (auto-formatted with Haiku)
+- Support for JSON input
+- Session memory across inputs
+- Special commands (see below)
+
+### Session Management
+
+- Resume from paused sessions
+- Resume from checkpoints
+- View session history
+- Export session data
+
+---
+
+## Keyboard Shortcuts
+
+<ParamField path="Tab" type="key">
+  Cycle between panels (chat input, conversation history, node view)
+</ParamField>
+
+<ParamField path="Ctrl+C" type="key">
+  Graceful shutdown (saves session state)
+</ParamField>
+
+<ParamField path="Ctrl+D" type="key">
+  Exit TUI
+</ParamField>
+
+<ParamField path="Ctrl+P" type="key">
+  Pause execution (at next node transition)
+</ParamField>
+
+<ParamField path="Ctrl+R" type="key">
+  Resume paused execution
+</ParamField>
+
+<ParamField path="Ctrl+L" type="key">
+  Clear screen
+</ParamField>
+
+<ParamField path="Up/Down" type="key">
+  Navigate conversation history
+</ParamField>
+
+<ParamField path="PgUp/PgDn" type="key">
+  Scroll conversation panel
+</ParamField>
+
+---
+
+## Special Commands
+
+While in the TUI, you can enter special commands in the input field:
+
+<ParamField path="/help" type="command">
+  Show help and available commands
+</ParamField>
+
+<ParamField path="/info" type="command">
+  Show agent information (name, goal, nodes, edges)
+</ParamField>
+
+<ParamField path="/nodes" type="command">
+  List all nodes in the agent graph
+</ParamField>
+
+<ParamField path="/status" type="command">
+  Show current execution status
+</ParamField>
+
+<ParamField path="/pause" type="command">
+  Pause execution at next node transition
+</ParamField>
+
+<ParamField path="/resume" type="command">
+  Resume paused execution
+</ParamField>
+
+<ParamField path="/reset" type="command">
+  Reset conversation state and agent session
+</ParamField>
+
+<ParamField path="/sessions" type="command">
+  List available sessions for this agent
+</ParamField>
+
+<ParamField path="/checkpoints" type="command">
+  List checkpoints for current session
+</ParamField>
+
+<ParamField path="/export" type="command">
+  Export current session data to file
+</ParamField>
+
+<ParamField path="/quit" type="command">
+  Exit TUI (same as Ctrl+D)
+</ParamField>
+
+---
+
+## Examples
+
+### Launch TUI with Agent Picker
+
+```bash
+hive tui
+```
+
+**Screen:**
+```
+┌───────────────────────────────────────────────┐
+│ Hive Agent Dashboard                           │
+├───────────────────────────────────────────────┤
+│ Available Agents:                              │
+│                                                │
+│ > Calculator                                   │
+│   Perform mathematical calculations            │
+│                                                │
+│   Lead Qualifier                               │
+│   Qualify sales leads                          │
+│                                                │
+│   Email Sender                                 │
+│   Send personalized emails                     │
+│                                                │
+└───────────────────────────────────────────────┘
+
+Use ↑↓ to select, Enter to load, Ctrl+C to exit
+```
+
+---
+
+### Launch with Specific Agent
+
+```bash
+hive run exports/calculator --tui
+```
+
+**Screen (during execution):**
+```
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ Calculator - Running                                                    │
+├────────────────────────────────────────────────────────────────────────────────┤
+│ Execution Path:                                                         │
+│ ✓ input_parser → ● calculator → output_formatter                    │
+│                                                                          │
+├────────────────────────────────────────────────────────────────────────────────┤
+│ Conversation:                                                            │
+│                                                                          │
+│ [input_parser]                                                           │
+│ Parsing expression: "2 + 3"                                              │
+│ Tool call: parse_expression(expression="2 + 3")                          │
+│ Result: {"op": "+", "left": 2, "right": 3}                              │
+│                                                                          │
+│ [calculator]                                                             │
+│ Calculating: 2 + 3                                                       │
+│ Tool call: calculate(op="+", left=2, right=3)                            │
+│ Result: 5                                                                │
+│                                                                          │
+├────────────────────────────────────────────────────────────────────────────────┤
+│ >>> Enter input (or /help for commands)                                  │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+Status: Running | Steps: 2/100 | Tokens: 150 | Time: 1.2s | Model: claude-haiku-4-5
+```
+
+---
+
+### Resume from Session
+
+```bash
+hive resume exports/assistant session_123 --tui
+```
+
+The TUI loads the session state and shows the conversation history before accepting new input.
+
+---
+
+### Using Special Commands
+
+```bash
+hive tui
+# Select agent
+>>> /info
+```
+
+**Output:**
+```
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ Agent Information                                                       │
+├────────────────────────────────────────────────────────────────────────────────┤
+│ Name: Calculator                                                         │
+│ Goal: Perform mathematical calculations accurately                       │
+│ Nodes: 3                                                                 │
+│ Edges: 2                                                                 │
+│                                                                          │
+│ Success Criteria:                                                        │
+│   - Result matches expected mathematical answer                          │
+│                                                                          │
+│ Constraints:                                                             │
+│   - [HARD] Handle invalid inputs gracefully                              │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Panels
+
+The TUI is organized into several panels:
+
+### Header
+- Agent name
+- Current status
+- Model being used
+
+### Execution Path
+- Visual representation of node flow
+- Current node highlighted
+- Completed nodes marked with ✓
+
+### Conversation History
+- Scrollable conversation log
+- LLM messages
+- Tool calls and results
+- Decision reasoning
+- Timestamps
+
+### Input Field
+- Chat-style input
+- Command completion
+- Input history (Up/Down arrows)
+
+### Status Bar
+- Execution state
+- Step count
+- Token usage
+- Elapsed time
+- Model name
+
+---
+
+## Color Scheme
+
+- **Green**: Success states, completed nodes
+- **Yellow**: Running, in-progress
+- **Red**: Errors, failed nodes
+- **Blue**: Information, node names
+- **Cyan**: Tool calls, special commands
+- **Gray**: Timestamps, metadata
+
+---
+
+## Exit
+
+To exit the TUI:
+
+1. **Ctrl+D** or **Ctrl+C**: Graceful shutdown (saves session state)
+2. **/quit** command: Exit via command
+
+The TUI automatically saves the current session state before exiting, allowing you to resume later.
+
+---
+
+## Advanced Features
+
+### Multi-Panel Layout
+
+Press `Tab` to cycle focus between:
+1. Input field
+2. Conversation history (scrollable)
+3. Node view (if available)
+
+### Session Export
+
+Export the current session data:
+```
+>>> /export session_data.json
+```
+
+Exports:
+- Conversation history
+- Execution path
+- Memory state
+- Metadata
+
+### Real-Time Updates
+
+The TUI updates in real-time:
+- Node transitions appear instantly
+- Token usage updates live
+- Streaming output shows as it's generated
+
+---
+
+## Troubleshooting
+
+**TUI doesn't render correctly:**
+- Ensure terminal supports 256 colors
+- Minimum terminal size: 80x24
+- Try resizing terminal window
+
+**Input lag:**
+- Disable verbose logging
+- Reduce conversation history size
+- Use `--quiet` mode
+
+**Can't see full output:**
+- Use PgUp/PgDn to scroll
+- Increase terminal size
+- Export session and view in editor

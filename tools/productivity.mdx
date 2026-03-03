@@ -1,0 +1,579 @@
+---
+title: Productivity Tools
+description: Manage calendars, CRM contacts, and scheduling systems
+---
+
+# Productivity Tools
+
+Productivity tools enable agents to manage calendars, interact with CRM systems, and handle scheduling workflows.
+
+## Google Calendar
+
+### calendar_list_events
+
+List upcoming calendar events.
+
+<ParamField path="calendar_id" type="string" default="primary">
+  Calendar ID or "primary" for main calendar
+</ParamField>
+
+<ParamField path="time_min" type="string">
+  Start time filter (ISO 8601 format, e.g., "2024-01-15T00:00:00Z")
+</ParamField>
+
+<ParamField path="time_max" type="string">
+  End time filter (ISO 8601 format)
+</ParamField>
+
+<ParamField path="max_results" type="integer" default="10">
+  Maximum events to return (1-2500)
+</ParamField>
+
+<ParamField path="query" type="string">
+  Free text search terms to filter events
+</ParamField>
+
+<ParamField path="account" type="string">
+  Account alias for multi-account support
+</ParamField>
+
+<CodeGroup>
+
+```python All Events
+from datetime import datetime, timedelta
+
+now = datetime.utcnow()
+week_later = now + timedelta(days=7)
+
+result = calendar_list_events(
+    time_min=now.isoformat() + "Z",
+    time_max=week_later.isoformat() + "Z",
+    max_results=50
+)
+
+for event in result["events"]:
+    print(f"{event['summary']}")
+    print(f"Start: {event['start']}")
+    print(f"End: {event['end']}\n")
+```
+
+```python Search Events
+result = calendar_list_events(
+    query="team meeting",
+    max_results=20
+)
+```
+
+```json Response
+{
+  "events": [
+    {
+      "id": "event123",
+      "summary": "Team Standup",
+      "start": {"dateTime": "2024-01-15T10:00:00Z"},
+      "end": {"dateTime": "2024-01-15T10:30:00Z"},
+      "attendees": [...],
+      "location": "Conference Room A"
+    }
+  ],
+  "total": 10
+}
+```
+
+</CodeGroup>
+
+### calendar_get_event
+
+Get details of a specific event.
+
+```python
+result = calendar_get_event(
+    calendar_id="primary",
+    event_id="event123"
+)
+
+print(f"Summary: {result['summary']}")
+print(f"Description: {result['description']}")
+print(f"Organizer: {result['organizer']['email']}")
+for attendee in result['attendees']:
+    print(f"  - {attendee['email']}: {attendee['responseStatus']}")
+```
+
+### calendar_create_event
+
+Create a new calendar event.
+
+<ParamField path="calendar_id" type="string" default="primary">
+  Calendar ID
+</ParamField>
+
+<ParamField path="summary" type="string" required>
+  Event title
+</ParamField>
+
+<ParamField path="start_time" type="string" required>
+  Start time (ISO 8601)
+</ParamField>
+
+<ParamField path="end_time" type="string" required>
+  End time (ISO 8601)
+</ParamField>
+
+<ParamField path="description" type="string">
+  Event description
+</ParamField>
+
+<ParamField path="location" type="string">
+  Event location
+</ParamField>
+
+<ParamField path="attendees" type="list">
+  List of attendee email addresses
+</ParamField>
+
+<ParamField path="timezone" type="string" default="UTC">
+  Timezone (IANA format, e.g., "America/New_York")
+</ParamField>
+
+<CodeGroup>
+
+```python Simple Event
+result = calendar_create_event(
+    summary="Project Review",
+    start_time="2024-01-15T14:00:00",
+    end_time="2024-01-15T15:00:00",
+    timezone="America/New_York"
+)
+
+print(f"Event created: {result['event_id']}")
+print(f"Link: {result['html_link']}")
+```
+
+```python With Attendees
+result = calendar_create_event(
+    summary="Team Meeting",
+    start_time="2024-01-15T10:00:00",
+    end_time="2024-01-15T11:00:00",
+    description="Discuss Q1 roadmap",
+    location="Conference Room A",
+    attendees=[
+        "alice@company.com",
+        "bob@company.com"
+    ],
+    timezone="America/Los_Angeles"
+)
+```
+
+```python All-Day Event
+result = calendar_create_event(
+    summary="Company Holiday",
+    start_time="2024-12-25",  # Date only for all-day
+    end_time="2024-12-26",
+    timezone="America/New_York"
+)
+```
+
+</CodeGroup>
+
+### calendar_update_event
+
+Update an existing event.
+
+```python
+result = calendar_update_event(
+    calendar_id="primary",
+    event_id="event123",
+    summary="Updated Meeting Title",
+    start_time="2024-01-15T15:00:00",
+    end_time="2024-01-15T16:00:00",
+    timezone="America/New_York"
+)
+```
+
+### calendar_delete_event
+
+Delete a calendar event.
+
+```python
+result = calendar_delete_event(
+    calendar_id="primary",
+    event_id="event123"
+)
+
+if result["success"]:
+    print("Event deleted")
+```
+
+### calendar_check_availability
+
+Check free/busy status for attendees.
+
+<ParamField path="attendees" type="list" required>
+  List of email addresses to check
+</ParamField>
+
+<ParamField path="time_min" type="string" required>
+  Start of time range (ISO 8601)
+</ParamField>
+
+<ParamField path="time_max" type="string" required>
+  End of time range (ISO 8601)
+</ParamField>
+
+<ParamField path="timezone" type="string" default="UTC">
+  Timezone for the query
+</ParamField>
+
+```python Example
+result = calendar_check_availability(
+    attendees=[
+        "alice@company.com",
+        "bob@company.com"
+    ],
+    time_min="2024-01-15T09:00:00Z",
+    time_max="2024-01-15T17:00:00Z",
+    timezone="America/New_York"
+)
+
+for email, availability in result["calendars"].items():
+    print(f"{email}:")
+    for busy_period in availability["busy"]:
+        print(f"  Busy: {busy_period['start']} - {busy_period['end']}")
+```
+
+### Configuration
+
+```bash Environment Variables
+export GOOGLE_CALENDAR_ACCESS_TOKEN=your_oauth_token
+```
+
+Or connect via Hive OAuth at `hive.adenhq.com`
+
+## HubSpot CRM
+
+### hubspot_get_contact
+
+Get contact details by ID or email.
+
+```python
+result = hubspot_get_contact(
+    contact_id="12345"
+)
+
+print(f"Name: {result['properties']['firstname']} {result['properties']['lastname']}")
+print(f"Email: {result['properties']['email']}")
+print(f"Company: {result['properties']['company']}")
+```
+
+### hubspot_create_contact
+
+Create a new contact.
+
+```python
+result = hubspot_create_contact(
+    email="john@example.com",
+    firstname="John",
+    lastname="Doe",
+    company="Acme Corp",
+    phone="555-1234"
+)
+
+print(f"Contact created: {result['id']}")
+```
+
+### hubspot_update_contact
+
+Update an existing contact.
+
+```python
+result = hubspot_update_contact(
+    contact_id="12345",
+    properties={
+        "lifecyclestage": "customer",
+        "company": "New Company Name"
+    }
+)
+```
+
+### hubspot_search_contacts
+
+Search for contacts.
+
+```python
+result = hubspot_search_contacts(
+    query="john@example.com",
+    limit=10
+)
+
+for contact in result["results"]:
+    print(f"{contact['properties']['email']}")
+```
+
+### hubspot_create_deal
+
+Create a new deal.
+
+```python
+result = hubspot_create_deal(
+    dealname="Q1 Enterprise Deal",
+    amount=50000,
+    pipeline="default",
+    dealstage="qualifiedtobuy",
+    closedate="2024-03-31"
+)
+```
+
+### hubspot_create_note
+
+Create a note attached to a contact.
+
+```python
+result = hubspot_create_note(
+    note="Discussed pricing for enterprise plan.",
+    contact_id="12345"
+)
+```
+
+### Configuration
+
+```bash
+export HUBSPOT_API_KEY=your_api_key
+```
+
+Get API key from HubSpot Settings > Integrations > Private Apps
+
+## Apollo.io
+
+### apollo_search_people
+
+Search for prospects.
+
+<ParamField path="query" type="string" required>
+  Search query
+</ParamField>
+
+<ParamField path="company" type="string">
+  Filter by company name
+</ParamField>
+
+<ParamField path="title" type="string">
+  Filter by job title
+</ParamField>
+
+<ParamField path="location" type="string">
+  Filter by location
+</ParamField>
+
+<ParamField path="limit" type="integer" default="10">
+  Maximum results (1-100)
+</ParamField>
+
+```python Example
+result = apollo_search_people(
+    query="software engineer",
+    company="Google",
+    location="San Francisco",
+    limit=20
+)
+
+for person in result["people"]:
+    print(f"{person['name']}")
+    print(f"Title: {person['title']}")
+    print(f"Email: {person['email']}")
+    print(f"LinkedIn: {person['linkedin_url']}\n")
+```
+
+### apollo_enrich_person
+
+Enrich person data by email or LinkedIn URL.
+
+```python
+result = apollo_enrich_person(
+    email="john@company.com"
+)
+
+print(f"Name: {result['name']}")
+print(f"Current Company: {result['organization']['name']}")
+print(f"Title: {result['title']}")
+```
+
+### apollo_search_companies
+
+Search for companies.
+
+```python
+result = apollo_search_companies(
+    query="AI startup",
+    location="San Francisco",
+    employee_range="11-50",
+    limit=10
+)
+
+for company in result["companies"]:
+    print(f"{company['name']}")
+    print(f"Industry: {company['industry']}")
+    print(f"Employees: {company['employee_count']}")
+```
+
+### Configuration
+
+```bash
+export APOLLO_API_KEY=your_api_key
+```
+
+## Cal.com
+
+### calcom_list_bookings
+
+List scheduled bookings.
+
+```python
+result = calcom_list_bookings(
+    status="upcoming",
+    limit=20
+)
+
+for booking in result["bookings"]:
+    print(f"{booking['title']}")
+    print(f"Time: {booking['startTime']}")
+    print(f"Attendee: {booking['attendees'][0]['email']}")
+```
+
+### calcom_get_availability
+
+Check availability for a date range.
+
+```python
+result = calcom_get_availability(
+    start_date="2024-01-15",
+    end_date="2024-01-19",
+    event_type_id="event123"
+)
+
+for slot in result["slots"]:
+    print(f"Available: {slot['time']}")
+```
+
+### calcom_create_booking
+
+Create a new booking.
+
+```python
+result = calcom_create_booking(
+    event_type_id="event123",
+    start_time="2024-01-15T14:00:00Z",
+    attendee_email="john@example.com",
+    attendee_name="John Doe",
+    attendee_timezone="America/New_York"
+)
+
+print(f"Booking created: {result['booking_uid']}")
+print(f"Meeting link: {result['meeting_url']}")
+```
+
+### Configuration
+
+```bash
+export CALCOM_API_KEY=your_api_key
+```
+
+## Google Analytics
+
+### google_analytics_run_report
+
+Run a Google Analytics 4 report.
+
+<ParamField path="property_id" type="string" required>
+  GA4 property ID
+</ParamField>
+
+<ParamField path="start_date" type="string" required>
+  Start date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="end_date" type="string" required>
+  End date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="metrics" type="list" required>
+  List of metrics to query
+</ParamField>
+
+<ParamField path="dimensions" type="list">
+  List of dimensions to group by
+</ParamField>
+
+```python Example
+result = google_analytics_run_report(
+    property_id="123456789",
+    start_date="2024-01-01",
+    end_date="2024-01-31",
+    metrics=["sessions", "activeUsers", "conversions"],
+    dimensions=["country", "deviceCategory"]
+)
+
+for row in result["rows"]:
+    print(f"Country: {row['country']}")
+    print(f"Device: {row['deviceCategory']}")
+    print(f"Sessions: {row['sessions']}")
+    print(f"Active Users: {row['activeUsers']}\n")
+```
+
+### Configuration
+
+```bash
+export GOOGLE_ANALYTICS_CREDENTIALS=path/to/service_account.json
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Calendar Management">
+    - Always specify timezone when creating events
+    - Check availability before scheduling meetings
+    - Use batch operations for multiple event updates
+    - Include meeting links and descriptions
+    - Set appropriate reminders
+  </Accordion>
+
+  <Accordion title="CRM Data Quality">
+    - Validate email addresses before creating contacts
+    - Check for duplicates before creating records
+    - Use consistent naming conventions
+    - Add notes for important interactions
+    - Update lifecyclestage as contacts progress
+  </Accordion>
+
+  <Accordion title="Rate Limits">
+    Platform limits:
+    - **HubSpot**: 100 requests/10 seconds
+    - **Apollo**: 100 requests/minute
+    - **Google Calendar**: 600 queries/minute/user
+    
+    Implement backoff strategies for 429 errors.
+  </Accordion>
+
+  <Accordion title="Error Handling">
+    ```python
+    result = calendar_create_event(...)
+    if "error" in result:
+        if "token" in result["error"].lower():
+            # Re-authenticate
+        elif "conflict" in result["error"].lower():
+            # Handle scheduling conflict
+        else:
+            # Log and retry
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Cloud APIs" icon="cloud" href="/tools/cloud-apis">
+    Google services and GitHub
+  </Card>
+  <Card title="Communication" icon="comments" href="/tools/communication">
+    Email and messaging tools
+  </Card>
+</CardGroup>

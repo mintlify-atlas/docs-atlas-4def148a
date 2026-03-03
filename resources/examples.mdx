@@ -1,0 +1,270 @@
+---
+title: Example Agents
+description: Working templates and recipes to help you build agents with Hive
+---
+
+This page contains two types of examples to help you build agents with the Hive framework: **Templates** (ready-to-run code) and **Recipes** (design blueprints).
+
+## Recipes vs Templates
+
+<CardGroup cols={2}>
+  <Card title="Recipes" icon="book-open" href="#recipes">
+    **"How to make it"** - Prompt-only descriptions with goals, nodes, and routing logic. Not runnable code.
+  </Card>
+  <Card title="Templates" icon="code" href="#templates">
+    **"Ready to eat"** - Working agent scaffolds that follow the standard Hive export structure.
+  </Card>
+</CardGroup>
+
+## Templates
+
+A template is a **working agent scaffold** that follows the standard Hive export structure. Copy the folder, rename it, swap in your own prompts and tools, and run it.
+
+### When to Use Templates
+
+- Get a new agent running quickly
+- Start from a known-good structure instead of from scratch
+- See how all the pieces (goal, nodes, edges, config, CLI) fit together in real code
+
+### Template Structure
+
+Each template is a complete agent package:
+
+```
+template_name/
+├── __init__.py       # Package exports
+├── __main__.py       # CLI entry point
+├── agent.py          # Goal, edges, graph spec, agent class
+├── agent.json        # Agent definition (used by build-from-template)
+├── config.py         # Runtime configuration
+├── nodes/
+│   └── __init__.py   # Node definitions (NodeSpec instances)
+└── README.md         # What this template demonstrates
+```
+
+### How to Use a Template
+
+<Tabs>
+  <Tab title="Option 1: Build from Template">
+    Use the `/hive-create` skill and select "From a template" to interactively pick a template, customize the goal/nodes/graph, and export a new agent.
+  </Tab>
+  <Tab title="Option 2: Manual Copy">
+    ```bash
+    # 1. Copy to your exports directory
+    cp -r examples/templates/deep_research_agent exports/my_research_agent
+
+    # 2. Update the module references in __main__.py and __init__.py
+
+    # 3. Customize goal, nodes, edges, and prompts
+
+    # 4. Run it
+    uv run python -m exports.my_research_agent --input '{"topic": "..."}'
+    ```
+  </Tab>
+</Tabs>
+
+### Available Templates
+
+<CardGroup cols={2}>
+  <Card title="Deep Research Agent" icon="magnifying-glass">
+    Interactive research agent that searches diverse sources, evaluates findings with user checkpoints, and produces a cited HTML report.
+    
+    **Features:**
+    - Multi-source research
+    - User checkpoint validation
+    - HTML report generation
+    - Citation tracking
+    
+    **Usage:**
+    ```bash
+    PYTHONPATH=core:examples/templates python -m deep_research_agent run --topic "AI"
+    ```
+  </Card>
+
+  <Card title="Email Inbox Management" icon="envelope">
+    Automatically manage Gmail inbox using user-defined rules. Fetch, classify, and take actions on emails.
+    
+    **Features:**
+    - Rule-based email classification
+    - Batch processing (configurable)
+    - Multiple actions (trash, spam, archive, star)
+    - Summary reporting
+    
+    **Nodes:** intake → fetch-emails → classify-and-act → report
+    
+    **Tools:** `gmail_list_messages`, `gmail_get_message`, `gmail_trash_message`, `gmail_modify_message`
+  </Card>
+
+  <Card title="Job Hunter" icon="briefcase">
+    Analyze resume, find matching jobs, and generate customized application materials.
+    
+    **Features:**
+    - Resume analysis and role matching
+    - Job search and scraping
+    - User job selection
+    - Custom resume suggestions
+    - Cold outreach email generation
+    
+    **Nodes:** intake → job-search → job-review → customize
+    
+    **Tools:** `web_search`, `web_scrape`, `save_data`
+  </Card>
+
+  <Card title="Tech News Reporter" icon="newspaper">
+    Research the latest technology and AI news from the web and produce a well-organized report.
+    
+    **Features:**
+    - Recent tech/AI news search
+    - Multi-source scraping
+    - Structured HTML report
+    - Source attribution
+    
+    **Nodes:** intake → research → compile-report
+    
+    **Tools:** `web_search`, `web_scrape`, `save_data`, `serve_file_to_user`
+  </Card>
+
+  <Card title="Competitive Intel Agent" icon="chart-line">
+    Monitor competitors and generate intelligence reports.
+    
+    **Features:**
+    - Competitor monitoring
+    - Market analysis
+    - Intelligence reporting
+  </Card>
+
+  <Card title="Vulnerability Assessment" icon="shield">
+    Security scanning and vulnerability assessment agent.
+    
+    **Features:**
+    - Security scanning
+    - Vulnerability detection
+    - Assessment reports
+  </Card>
+</CardGroup>
+
+## Recipes
+
+A recipe describes an agent's design — the goal, nodes, prompts, edge logic, and tools — without providing runnable code. Think of it as a blueprint: it tells you *how* to build the agent, but you do the building.
+
+### When to Use Recipes
+
+- Understand a pattern before committing to an implementation
+- Adapt an idea to your own codebase or tooling
+- Learn how to think about agent design (goals, nodes, edges, prompts)
+
+### What's in a Recipe
+
+Each recipe is a markdown file containing:
+
+- **Goal**: What the agent accomplishes, including success criteria and constraints
+- **Nodes**: Each step in the workflow, with the system prompt, node type, and input/output keys
+- **Edges**: How nodes connect, including conditions and routing logic
+- **Tools**: What external tools or MCP servers the agent needs
+- **Usage notes**: Tips, gotchas, and suggested variations
+
+### How to Use a Recipe
+
+<Steps>
+  <Step title="Read the recipe">
+    Understand the design pattern and goals.
+  </Step>
+  <Step title="Create a new agent">
+    Use the standard export structure (see templates for a scaffold).
+  </Step>
+  <Step title="Translate to code">
+    Convert the recipe's goal, nodes, and edges into implementation.
+  </Step>
+  <Step title="Wire in tools">
+    Connect the tools described in the recipe.
+  </Step>
+  <Step title="Test and iterate">
+    Run and refine your implementation.
+  </Step>
+</Steps>
+
+### Available Recipes
+
+<AccordionGroup>
+  <Accordion title="Sales & Marketing" icon="chart-mixed">
+    <CardGroup cols={2}>
+      <Card title="Social Media Management">
+        Schedule posts, reply to comments, monitor trends
+      </Card>
+      <Card title="Newsletter Production">
+        Transform voice memos and ideas into polished emails
+      </Card>
+      <Card title="News Jacking">
+        Personalized outreach triggered by real-time company news
+      </Card>
+      <Card title="Ad Campaign Monitoring">
+        Monitor and analyze advertising campaign performance
+      </Card>
+      <Card title="CRM Update">
+        Ensure every lead has follow-up dates and status
+      </Card>
+    </CardGroup>
+  </Accordion>
+
+  <Accordion title="Customer Success" icon="headset">
+    <CardGroup cols={2}>
+      <Card title="Inquiry Triaging">
+        Sort tire kickers from hot leads
+      </Card>
+      <Card title="Onboarding Assistance">
+        Guide new clients through setup and welcome kits
+      </Card>
+    </CardGroup>
+  </Accordion>
+
+  <Accordion title="Operations Automation" icon="gears">
+    <CardGroup cols={2}>
+      <Card title="Inbox Management">
+        Clear spam and surface emails that need your brain
+      </Card>
+      <Card title="Invoicing & Collections">
+        Send invoices and chase overdue payments
+      </Card>
+      <Card title="Data Keeper">
+        Pull data from multiple sources into unified reports
+      </Card>
+      <Card title="Calendar Coordination">
+        Protect Deep Work time and book travel
+      </Card>
+    </CardGroup>
+  </Accordion>
+
+  <Accordion title="Technical & Product Maintenance" icon="code">
+    <CardGroup cols={2}>
+      <Card title="Quality Assurance">
+        Test features and links before they go live
+      </Card>
+      <Card title="Documentation">
+        Turn messy processes into clean SOPs
+      </Card>
+      <Card title="Support Troubleshooting">
+        Handle Level 1 tech support
+      </Card>
+      <Card title="Issue Triaging">
+        Categorize and route bug reports by severity
+      </Card>
+    </CardGroup>
+  </Accordion>
+</AccordionGroup>
+
+## Getting Started
+
+<CardGroup cols={2}>
+  <Card title="View All Templates" icon="github" href="https://github.com/aden-hive/hive/tree/main/examples/templates">
+    Browse the complete collection of working templates on GitHub
+  </Card>
+  <Card title="View All Recipes" icon="github" href="https://github.com/aden-hive/hive/tree/main/examples/recipes">
+    Explore design blueprints for common agent patterns
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/resources/contributing">
+    Learn how to contribute your own examples
+  </Card>
+  <Card title="Developer Guide" icon="book" href="/quickstart">
+    Complete guide for building agents
+  </Card>
+</CardGroup>

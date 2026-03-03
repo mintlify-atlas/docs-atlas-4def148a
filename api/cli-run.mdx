@@ -1,0 +1,369 @@
+---
+title: 'Run Command'
+description: 'Execute an exported agent'
+---
+
+## Overview
+
+The `hive run` command executes an exported agent with the given input.
+
+```bash
+hive run <agent_path> [options]
+```
+
+---
+
+## Arguments
+
+<ParamField path="agent_path" type="str" required>
+  Path to agent folder (containing agent.json)
+</ParamField>
+
+---
+
+## Input Options
+
+<ParamField path="--input" type="str">
+  Input context as JSON string
+  ```bash
+  hive run exports/calculator --input '{"expression": "2 + 3"}'
+  ```
+</ParamField>
+
+<ParamField path="--input-file" type="str">
+  Input context from JSON file
+  ```bash
+  hive run exports/calculator --input-file input.json
+  ```
+</ParamField>
+
+---
+
+## Output Options
+
+<ParamField path="--output" type="str">
+  Write results to file instead of stdout
+  ```bash
+  hive run exports/calculator --input '{...}' --output result.json
+  ```
+</ParamField>
+
+<ParamField path="--quiet" type="flag">
+  Only output the final result JSON (suppress execution logs)
+  ```bash
+  hive run exports/calculator --input '{...}' --quiet
+  ```
+</ParamField>
+
+<ParamField path="--verbose" type="flag">
+  Show detailed execution logs (steps, LLM calls, etc.)
+  ```bash
+  hive run exports/calculator --input '{...}' --verbose
+  ```
+</ParamField>
+
+---
+
+## Execution Options
+
+<ParamField path="--model" type="str">
+  LLM model to use (any LiteLLM-compatible name)
+  ```bash
+  hive run exports/calculator --model claude-sonnet-4-20250514 --input '{...}'
+  ```
+  
+  Overrides the agent's default model.
+</ParamField>
+
+<ParamField path="--tui" type="flag">
+  Launch interactive terminal dashboard
+  ```bash
+  hive run exports/calculator --tui
+  ```
+  
+  Opens the TUI where you can monitor execution, see live logs, and interact with the agent.
+</ParamField>
+
+---
+
+## Resume Options
+
+<ParamField path="--resume-session" type="str">
+  Resume from a specific session ID
+  ```bash
+  hive run exports/calculator --resume-session session_20240315_143022
+  ```
+  
+  Loads the session state and continues from where it left off.
+</ParamField>
+
+<ParamField path="--checkpoint" type="str">
+  Resume from a specific checkpoint (requires --resume-session)
+  ```bash
+  hive run exports/calculator --resume-session session_123 --checkpoint checkpoint_5
+  ```
+  
+  Restores execution state from the specified checkpoint.
+</ParamField>
+
+---
+
+## Output Format
+
+When execution completes, the output includes:
+
+```json
+{
+  "success": true,
+  "steps_executed": 5,
+  "output": {
+    "result": 5,
+    "formatted_result": "The answer is 5"
+  },
+  "error": null,
+  "paused_at": null
+}
+```
+
+<ResponseField name="success" type="bool">
+  Whether the agent achieved its goal
+</ResponseField>
+
+<ResponseField name="steps_executed" type="int">
+  Number of nodes executed
+</ResponseField>
+
+<ResponseField name="output" type="dict">
+  Final output data from the agent
+</ResponseField>
+
+<ResponseField name="error" type="str | null">
+  Error message if execution failed
+</ResponseField>
+
+<ResponseField name="paused_at" type="str | null">
+  Node ID where execution paused (for HITL or resume)
+</ResponseField>
+
+---
+
+## Examples
+
+### Basic Execution
+
+```bash
+hive run exports/calculator --input '{"expression": "2 + 3"}'
+```
+
+**Output:**
+```
+Agent: Calculator
+Goal: Perform calculations
+Steps: 3
+Input: {"expression": "2 + 3"}
+
+============================================================
+Executing agent...
+============================================================
+
+============================================================
+Status: SUCCESS
+Steps executed: 3
+Path: input_parser → calculator → output_formatter
+============================================================
+
+--- Results ---
+The answer is 5
+```
+
+---
+
+### Quiet Mode (JSON Only)
+
+```bash
+hive run exports/calculator --input '{"expression": "2 + 3"}' --quiet
+```
+
+**Output:**
+```json
+{
+  "success": true,
+  "steps_executed": 3,
+  "output": {
+    "result": 5,
+    "formatted_result": "The answer is 5"
+  }
+}
+```
+
+---
+
+### Verbose Mode
+
+```bash
+hive run exports/calculator --input '{"expression": "2 + 3"}' --verbose
+```
+
+**Output:**
+```
+Agent: Calculator
+Goal: Perform calculations
+
+[INFO] Executing node: input_parser
+[INFO] Input: {"expression": "2 + 3"}
+[INFO] LLM call: claude-haiku-4-5-20251001
+[INFO] Tool call: parse_expression(expression="2 + 3")
+[INFO] Output: {"parsed": {"op": "+", "left": 2, "right": 3}}
+[INFO] ✓ input_parser completed (420ms, 150 tokens)
+
+[INFO] Executing node: calculator
+...
+```
+
+---
+
+### Save to File
+
+```bash
+hive run exports/calculator --input '{"expression": "2 + 3"}' --output result.json
+cat result.json
+```
+
+---
+
+### Use Different Model
+
+```bash
+# Use Claude Sonnet instead of default Haiku
+hive run exports/calculator \
+  --model claude-sonnet-4-20250514 \
+  --input '{"expression": "integrate x^2 from 0 to 10"}'
+```
+
+---
+
+### Interactive TUI
+
+```bash
+hive run exports/assistant --tui
+```
+
+Launches an interactive terminal dashboard where you can:
+- Enter input naturally
+- See live execution logs
+- Monitor node transitions
+- View conversation history
+- Interact with HITL prompts
+
+---
+
+### Resume from Session
+
+```bash
+# First run (pauses at HITL node)
+hive run exports/workflow --input '{"task": "process data"}'
+# Output: "paused_at": "approval_node", session saved as session_123
+
+# Resume later
+hive run exports/workflow --resume-session session_123 --input '{"approved": true}'
+```
+
+---
+
+### Resume from Checkpoint
+
+```bash
+# List checkpoints
+hive sessions checkpoints exports/workflow session_123
+# Output: checkpoint_1, checkpoint_2, checkpoint_3
+
+# Resume from specific checkpoint
+hive run exports/workflow \
+  --resume-session session_123 \
+  --checkpoint checkpoint_2
+```
+
+---
+
+## Input Auto-Injection
+
+If the agent expects a `user_id` input but none is provided, the framework auto-injects the current user:
+
+```bash
+# No user_id in input
+hive run exports/assistant --input '{"message": "Hello"}'
+# Framework adds: "user_id": "your_username"
+```
+
+You can override this:
+
+```bash
+hive run exports/assistant --input '{"message": "Hello", "user_id": "alice"}'
+```
+
+---
+
+## Error Handling
+
+If execution fails:
+
+```bash
+hive run exports/calculator --input '{"expression": "invalid"}'
+```
+
+**Output:**
+```
+============================================================
+Status: FAILED
+Steps executed: 2
+Path: input_parser → calculator
+============================================================
+
+Error: Invalid expression: 'invalid'
+```
+
+**Exit code:** 1
+
+---
+
+## Input from File
+
+```bash
+# Create input.json
+cat > input.json <<EOF
+{
+  "lead_name": "Acme Corp",
+  "email": "contact@acme.com",
+  "budget": 50000
+}
+EOF
+
+# Run with file input
+hive run exports/lead-qualifier --input-file input.json
+```
+
+---
+
+## Piping Output
+
+```bash
+# Extract specific field
+hive run exports/calculator --input '{"expression": "2 + 3"}' --quiet | jq '.output.result'
+# Output: 5
+
+# Check success
+hive run exports/agent --input '{...}' --quiet | jq '.success'
+# Output: true
+```
+
+---
+
+## Exit Codes
+
+<ResponseField name="0" type="int">
+  Success - Agent completed successfully
+</ResponseField>
+
+<ResponseField name="1" type="int">
+  Failure - Agent failed, invalid input, or execution error
+</ResponseField>

@@ -1,0 +1,460 @@
+---
+title: 'CLI Overview'
+description: 'Command-line interface for the Hive framework'
+---
+
+## Overview
+
+The Hive CLI (`hive`) provides commands for running agents, managing sessions, testing, and more.
+
+```bash
+hive --help
+```
+
+## Installation
+
+```bash
+pip install -e core/
+```
+
+The `hive` command will be available in your PATH.
+
+---
+
+## Global Options
+
+<ParamField path="--model" type="str" default="claude-haiku-4-5-20251001">
+  Anthropic model to use for all commands
+</ParamField>
+
+---
+
+## Command Categories
+
+### Agent Execution
+
+- [`hive run`](/api/cli-run) - Run an exported agent
+- [`hive shell`](#shell) - Interactive agent session
+- [`hive dispatch`](#dispatch) - Dispatch to multiple agents
+- [`hive tui`](/api/cli-tui) - Launch interactive TUI dashboard
+
+### Agent Information
+
+- [`hive info`](#info) - Show agent information
+- [`hive validate`](#validate) - Validate an agent
+- [`hive list`](#list) - List available agents
+
+### Session Management
+
+- [`hive sessions list`](#sessions-list) - List agent sessions
+- [`hive sessions show`](#sessions-show) - Show session details
+- [`hive sessions checkpoints`](#sessions-checkpoints) - List checkpoints
+- [`hive pause`](#pause) - Pause running session
+- [`hive resume`](#resume) - Resume from checkpoint
+
+### Testing
+
+- [`hive test-run`](/api/cli-test) - Run tests for an agent
+- [`hive test-debug`](/api/cli-test#test-debug) - Debug a failed test
+- [`hive test-list`](/api/cli-test#test-list) - List tests
+- [`hive test-stats`](/api/cli-test#test-stats) - Show test statistics
+
+### Development
+
+- [`hive code`](#code) - Launch Hive Coder (agent builder)
+- [`hive setup-credentials`](#setup-credentials) - Interactive credential setup
+- [`hive serve`](#serve) - Start HTTP API server
+
+---
+
+## Common Commands
+
+### info
+
+Show agent information.
+
+```bash
+hive info exports/my_agent
+hive info exports/my_agent --json
+```
+
+<ParamField path="agent_path" type="str" required>
+  Path to agent folder (containing agent.json)
+</ParamField>
+
+<ParamField path="--json" type="flag">
+  Output as JSON
+</ParamField>
+
+---
+
+### validate
+
+Validate an exported agent.
+
+```bash
+hive validate exports/my_agent
+```
+
+<ParamField path="agent_path" type="str" required>
+  Path to agent folder
+</ParamField>
+
+**Output:**
+- Graph structure validation
+- Tool availability check
+- Warnings and suggestions
+
+---
+
+### list
+
+List available agents.
+
+```bash
+hive list
+hive list exports/
+```
+
+<ParamField path="directory" type="str" default="exports">
+  Directory to search for agents
+</ParamField>
+
+---
+
+### shell
+
+Start an interactive agent session (REPL).
+
+```bash
+hive shell exports/my_agent
+hive shell  # Interactive selection
+hive shell --multi  # Multi-agent mode
+```
+
+<ParamField path="agent_path" type="str">
+  Path to agent folder (optional, can select interactively)
+</ParamField>
+
+<ParamField path="--agents-dir" type="str" default="exports">
+  Directory containing agents
+</ParamField>
+
+<ParamField path="--multi" type="flag">
+  Enable multi-agent mode with orchestrator
+</ParamField>
+
+<ParamField path="--no-approve" type="flag">
+  Disable human-in-the-loop approval (auto-approve all steps)
+</ParamField>
+
+**Features:**
+- Natural language input (auto-formatted with Haiku)
+- JSON input support
+- Session memory across inputs
+- Special commands:
+  - `/info` - Show agent details
+  - `/nodes` - Show agent nodes
+  - `/reset` - Reset conversation state
+  - `/quit` - Exit
+
+---
+
+### dispatch
+
+Dispatch request to multiple agents via orchestrator.
+
+```bash
+hive dispatch exports/ --input '{"task": "analyze data"}' --intent "Data analysis"
+hive dispatch --agents my_agent1 my_agent2 --input '{"task": "..."}'
+```
+
+<ParamField path="agents_dir" type="str" default="exports">
+  Directory containing agent folders
+</ParamField>
+
+<ParamField path="--input" type="str" required>
+  Input context as JSON string
+</ParamField>
+
+<ParamField path="--intent" type="str">
+  Description of what you want to accomplish
+</ParamField>
+
+<ParamField path="--agents" type="list[str]">
+  Specific agent names to use (default: all in directory)
+</ParamField>
+
+<ParamField path="--quiet" type="flag">
+  Only output the final result JSON
+</ParamField>
+
+---
+
+### code
+
+Launch Hive Coder (interactive agent builder).
+
+```bash
+hive code
+hive code --model claude-sonnet-4-20250514
+```
+
+<ParamField path="--model" type="str">
+  LLM model to use (any LiteLLM-compatible name)
+</ParamField>
+
+Opens the Hive Coder TUI where you can describe what you want and the coder builds the agent for you.
+
+---
+
+## Session Management
+
+### sessions list
+
+List agent sessions.
+
+```bash
+hive sessions list exports/my_agent
+hive sessions list exports/my_agent --status failed
+hive sessions list exports/my_agent --has-checkpoints
+```
+
+<ParamField path="agent_path" type="str" required>
+  Path to agent folder
+</ParamField>
+
+<ParamField path="--status" type="str" default="all">
+  Filter by status: all, active, failed, completed, paused
+</ParamField>
+
+<ParamField path="--has-checkpoints" type="flag">
+  Show only sessions with checkpoints
+</ParamField>
+
+---
+
+### sessions show
+
+Show session details.
+
+```bash
+hive sessions show exports/my_agent session_123
+hive sessions show exports/my_agent session_123 --json
+```
+
+<ParamField path="agent_path" type="str" required>
+  Path to agent folder
+</ParamField>
+
+<ParamField path="session_id" type="str" required>
+  Session ID to inspect
+</ParamField>
+
+<ParamField path="--json" type="flag">
+  Output as JSON
+</ParamField>
+
+---
+
+### sessions checkpoints
+
+List session checkpoints.
+
+```bash
+hive sessions checkpoints exports/my_agent session_123
+```
+
+<ParamField path="agent_path" type="str" required>
+  Path to agent folder
+</ParamField>
+
+<ParamField path="session_id" type="str" required>
+  Session ID
+</ParamField>
+
+---
+
+### pause
+
+Request graceful pause of a running session.
+
+```bash
+hive pause exports/my_agent session_123
+```
+
+<ParamField path="agent_path" type="str" required>
+  Path to agent folder
+</ParamField>
+
+<ParamField path="session_id" type="str" required>
+  Session ID to pause
+</ParamField>
+
+---
+
+### resume
+
+Resume a paused or failed session from a checkpoint.
+
+```bash
+hive resume exports/my_agent session_123
+hive resume exports/my_agent session_123 --checkpoint checkpoint_5
+hive resume exports/my_agent session_123 --tui
+```
+
+<ParamField path="agent_path" type="str" required>
+  Path to agent folder
+</ParamField>
+
+<ParamField path="session_id" type="str" required>
+  Session ID to resume
+</ParamField>
+
+<ParamField path="--checkpoint" type="str">
+  Specific checkpoint ID to resume from (default: latest)
+</ParamField>
+
+<ParamField path="--tui" type="flag">
+  Resume in TUI dashboard mode
+</ParamField>
+
+---
+
+### setup-credentials
+
+Interactive credential setup.
+
+```bash
+hive setup-credentials exports/my_agent
+hive setup-credentials  # General setup
+```
+
+<ParamField path="agent_path" type="str">
+  Path to agent folder (optional - runs general setup if not specified)
+</ParamField>
+
+Guides you through setting up required credentials for an agent.
+
+---
+
+### serve
+
+Start HTTP API server.
+
+```bash
+hive serve
+hive serve --port 8080 --host 0.0.0.0
+hive serve --agent exports/my_agent --model claude-sonnet-4-20250514 --open
+```
+
+<ParamField path="--host" type="str" default="127.0.0.1">
+  Host to bind
+</ParamField>
+
+<ParamField path="--port" type="int" default="8787">
+  Port to listen on
+</ParamField>
+
+<ParamField path="--agent" type="list[str]">
+  Agent path(s) to preload (repeatable)
+</ParamField>
+
+<ParamField path="--model" type="str">
+  LLM model for preloaded agents
+</ParamField>
+
+<ParamField path="--open" type="flag">
+  Open dashboard in browser after server starts
+</ParamField>
+
+**Features:**
+- REST + SSE APIs for agent control
+- Web dashboard for monitoring
+- Multi-agent support
+
+---
+
+## Examples
+
+### Run an agent
+
+```bash
+# Basic run
+hive run exports/calculator --input '{"expression": "2 + 3"}'
+
+# With TUI
+hive run exports/calculator --input '{"expression": "2 + 3"}' --tui
+
+# Resume from session
+hive run exports/calculator --resume-session session_123
+
+# Resume from checkpoint
+hive run exports/calculator --resume-session session_123 --checkpoint checkpoint_5
+```
+
+### Interactive session
+
+```bash
+hive shell exports/assistant
+>>> What's the weather in SF?
+>>> /info
+>>> /reset
+>>> /quit
+```
+
+### Test an agent
+
+```bash
+# Run all tests
+hive test-run exports/calculator --goal calc-001
+
+# Run constraint tests only
+hive test-run exports/calculator --goal calc-001 --type constraint
+
+# Parallel execution
+hive test-run exports/calculator --goal calc-001 --parallel 4
+
+# Debug a failed test
+hive test-debug exports/calculator test_constraint_no_crash
+```
+
+### Manage sessions
+
+```bash
+# List sessions
+hive sessions list exports/assistant --status paused
+
+# Show session details
+hive sessions show exports/assistant session_123
+
+# Resume from pause
+hive resume exports/assistant session_123 --tui
+```
+
+---
+
+## Environment Variables
+
+<ParamField path="ANTHROPIC_API_KEY" type="str">
+  Required for Claude models
+</ParamField>
+
+<ParamField path="OPENAI_API_KEY" type="str">
+  Required for GPT models
+</ParamField>
+
+<ParamField path="HIVE_STORAGE_PATH" type="str" default="~/.hive">
+  Base path for agent storage
+</ParamField>
+
+<ParamField path="LOG_LEVEL" type="str" default="INFO">
+  Logging level: DEBUG, INFO, WARNING, ERROR
+</ParamField>
+
+---
+
+## Exit Codes
+
+- `0`: Success
+- `1`: Error (validation failed, execution failed, etc.)

@@ -1,0 +1,388 @@
+---
+title: 'Graph API'
+description: 'Complete graph specification for agent execution'
+---
+
+## Overview
+
+The `GraphSpec` class defines the complete structure of an agent graph, including nodes, edges, entry/terminal points, and execution configuration.
+
+## Class: GraphSpec
+
+```python
+from framework.graph import GraphSpec, NodeSpec, EdgeSpec, EdgeCondition
+
+graph = GraphSpec(
+    id="calculator-graph",
+    goal_id="calc-001",
+    entry_node="input_parser",
+    terminal_nodes=["output_formatter"],
+    nodes=[...],
+    edges=[...]
+)
+```
+
+### Required Fields
+
+<ParamField path="id" type="str" required>
+  Unique identifier for the graph
+</ParamField>
+
+<ParamField path="goal_id" type="str" required>
+  ID of the goal this graph achieves
+</ParamField>
+
+<ParamField path="entry_node" type="str" required>
+  ID of the first node to execute
+</ParamField>
+
+<ParamField path="nodes" type="list[NodeSpec]" default="[]">
+  All node specifications
+</ParamField>
+
+<ParamField path="edges" type="list[EdgeSpec]" default="[]">
+  All edge specifications
+</ParamField>
+
+### Optional Fields
+
+<ParamField path="terminal_nodes" type="list[str]" default="[]">
+  IDs of nodes that end execution
+</ParamField>
+
+<ParamField path="pause_nodes" type="list[str]" default="[]">
+  IDs of nodes that pause for human input
+</ParamField>
+
+<ParamField path="entry_points" type="dict[str, str]" default="{}">
+  Named entry points for resuming. Format: `{name: node_id}`
+</ParamField>
+
+<ParamField path="async_entry_points" type="list[AsyncEntryPointSpec]" default="[]">
+  Asynchronous entry points for concurrent execution streams
+</ParamField>
+
+<ParamField path="memory_keys" type="list[str]" default="[]">
+  Keys available in shared memory
+</ParamField>
+
+<ParamField path="default_model" type="str" default="'claude-haiku-4-5-20251001'">
+  Default LLM model for nodes
+</ParamField>
+
+<ParamField path="max_tokens" type="int" default="8192">
+  Maximum tokens for LLM responses
+</ParamField>
+
+<ParamField path="max_steps" type="int" default="100">
+  Maximum node executions before timeout
+</ParamField>
+
+<ParamField path="max_retries_per_node" type="int" default="3">
+  Maximum retries per node on failure
+</ParamField>
+
+<ParamField path="conversation_mode" type="str" default="'continuous'">
+  Conversation flow mode: "continuous" or "isolated"
+</ParamField>
+
+<ParamField path="identity_prompt" type="str | None" default="None">
+  Agent-level identity prompt (Layer 1 of onion model)
+</ParamField>
+
+<ParamField path="version" type="str" default="'1.0.0'">
+  Graph version
+</ParamField>
+
+<ParamField path="description" type="str" default="''">
+  Human-readable description
+</ParamField>
+
+<ParamField path="created_by" type="str" default="''">
+  Creator: "human" or "builder_agent"
+</ParamField>
+
+---
+
+## Methods
+
+### get_node()
+
+Get a node by ID.
+
+```python
+node = graph.get_node("calculator")
+if node:
+    print(node.name)
+```
+
+<ParamField path="node_id" type="str" required>
+  The node ID to retrieve
+</ParamField>
+
+<ResponseField name="node" type="NodeSpec | None">
+  The node specification, or None if not found
+</ResponseField>
+
+---
+
+### get_outgoing_edges()
+
+Get all edges leaving a node, sorted by priority.
+
+```python
+edges = graph.get_outgoing_edges("calculator")
+for edge in edges:
+    print(f"{edge.target} ({edge.condition})")
+```
+
+<ParamField path="node_id" type="str" required>
+  The source node ID
+</ParamField>
+
+<ResponseField name="edges" type="list[EdgeSpec]">
+  List of outgoing edges, sorted by priority (highest first)
+</ResponseField>
+
+---
+
+### get_incoming_edges()
+
+Get all edges entering a node.
+
+```python
+edges = graph.get_incoming_edges("formatter")
+for edge in edges:
+    print(f"{edge.source} -> {edge.target}")
+```
+
+<ParamField path="node_id" type="str" required>
+  The target node ID
+</ParamField>
+
+<ResponseField name="edges" type="list[EdgeSpec]">
+  List of incoming edges
+</ResponseField>
+
+---
+
+### validate()
+
+Validate the graph structure.
+
+```python
+errors = graph.validate()
+if errors:
+    for error in errors:
+        print(f"Error: {error}")
+else:
+    print("✓ Graph is valid")
+```
+
+<ResponseField name="errors" type="list[str]">
+  List of validation error messages (empty if valid)
+</ResponseField>
+
+---
+
+### detect_fan_out_nodes()
+
+Detect nodes that fan out to multiple targets.
+
+```python
+fan_outs = graph.detect_fan_out_nodes()
+for source, targets in fan_outs.items():
+    print(f"{source} -> {targets}")
+```
+
+<ResponseField name="fan_outs" type="dict[str, list[str]]">
+  Mapping of source_node_id to list of parallel target_node_ids
+</ResponseField>
+
+---
+
+### detect_fan_in_nodes()
+
+Detect nodes that receive from multiple sources.
+
+```python
+fan_ins = graph.detect_fan_in_nodes()
+for target, sources in fan_ins.items():
+    print(f"{sources} -> {target}")
+```
+
+<ResponseField name="fan_ins" type="dict[str, list[str]]">
+  Mapping of target_node_id to list of source_node_ids
+</ResponseField>
+
+---
+
+### get_entry_point()
+
+Get the appropriate entry point based on session state.
+
+```python
+entry_node = graph.get_entry_point(session_state)
+print(f"Starting at: {entry_node}")
+```
+
+<ParamField path="session_state" type="dict | None" default="None">
+  Optional session state with 'paused_at' or 'resume_from' key
+</ParamField>
+
+<ResponseField name="entry_node" type="str">
+  Node ID to start execution from
+</ResponseField>
+
+---
+
+## Async Entry Points
+
+For multi-entry-point agents that handle concurrent execution streams:
+
+### Class: AsyncEntryPointSpec
+
+```python
+from framework.graph.edge import AsyncEntryPointSpec
+
+entry = AsyncEntryPointSpec(
+    id="webhook",
+    name="Zendesk Webhook Handler",
+    entry_node="process-webhook",
+    trigger_type="webhook",
+    isolation_level="shared",
+    max_concurrent=10
+)
+```
+
+<ParamField path="id" type="str" required>
+  Unique identifier for this entry point
+</ParamField>
+
+<ParamField path="name" type="str" required>
+  Human-readable name
+</ParamField>
+
+<ParamField path="entry_node" type="str" required>
+  Node ID to start execution from
+</ParamField>
+
+<ParamField path="trigger_type" type="str" default="'manual'">
+  How this entry point is triggered: webhook, api, timer, event, manual
+</ParamField>
+
+<ParamField path="trigger_config" type="dict[str, Any]" default="{}">
+  Trigger-specific configuration (e.g., webhook URL, timer interval)
+</ParamField>
+
+<ParamField path="isolation_level" type="str" default="'shared'">
+  State isolation: isolated, shared, or synchronized
+</ParamField>
+
+<ParamField path="priority" type="int" default="0">
+  Execution priority (higher = more priority)
+</ParamField>
+
+<ParamField path="max_concurrent" type="int" default="10">
+  Maximum concurrent executions for this entry point
+</ParamField>
+
+<ParamField path="max_resurrections" type="int" default="3">
+  Auto-restart on non-fatal failure (0 to disable)
+</ParamField>
+
+---
+
+## Example: Single Entry Point
+
+```python
+from framework.graph import GraphSpec, NodeSpec, EdgeSpec, EdgeCondition
+
+graph = GraphSpec(
+    id="calculator-graph",
+    goal_id="calc-001",
+    entry_node="input_parser",
+    terminal_nodes=["output_formatter", "error_handler"],
+    nodes=[
+        NodeSpec(
+            id="input_parser",
+            name="Input Parser",
+            description="Parse user input",
+            node_type="event_loop",
+            input_keys=["expression"],
+            output_keys=["parsed_expr"],
+        ),
+        NodeSpec(
+            id="calculator",
+            name="Calculator",
+            description="Perform calculation",
+            node_type="event_loop",
+            input_keys=["parsed_expr"],
+            output_keys=["result"],
+        ),
+        NodeSpec(
+            id="output_formatter",
+            name="Output Formatter",
+            description="Format the result",
+            node_type="event_loop",
+            input_keys=["result"],
+            output_keys=["formatted_result"],
+        ),
+    ],
+    edges=[
+        EdgeSpec(
+            id="parse-to-calc",
+            source="input_parser",
+            target="calculator",
+            condition=EdgeCondition.ON_SUCCESS,
+        ),
+        EdgeSpec(
+            id="calc-to-format",
+            source="calculator",
+            target="output_formatter",
+            condition=EdgeCondition.ON_SUCCESS,
+        ),
+    ],
+    memory_keys=["expression", "parsed_expr", "result", "formatted_result"],
+    max_steps=50,
+)
+
+# Validate
+errors = graph.validate()
+if not errors:
+    print("✓ Graph is valid")
+```
+
+---
+
+## Example: Multi-Entry Point Agent
+
+```python
+from framework.graph.edge import AsyncEntryPointSpec
+
+graph = GraphSpec(
+    id="support-agent-graph",
+    goal_id="support-001",
+    entry_node="process-webhook",  # Default entry
+    async_entry_points=[
+        AsyncEntryPointSpec(
+            id="webhook",
+            name="Zendesk Webhook",
+            entry_node="process-webhook",
+            trigger_type="webhook",
+            isolation_level="shared",
+            max_concurrent=20,
+        ),
+        AsyncEntryPointSpec(
+            id="api",
+            name="API Handler",
+            entry_node="process-request",
+            trigger_type="api",
+            isolation_level="isolated",
+            max_concurrent=10,
+        ),
+    ],
+    nodes=[...],
+    edges=[...],
+)
+```

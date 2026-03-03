@@ -1,0 +1,469 @@
+---
+title: 'Edge API'
+description: 'Edge specifications and conditional routing'
+---
+
+## Overview
+
+Edges define how nodes connect in a graph. They determine:
+1. Source and target nodes
+2. Conditions for traversal
+3. Data mapping between nodes
+
+Unlike traditional graphs, Hive edges can be created dynamically by a Builder agent based on the goal.
+
+## Class: EdgeSpec
+
+```python
+from framework.graph import EdgeSpec, EdgeCondition
+
+edge = EdgeSpec(
+    id="calc-to-format",
+    source="calculator",
+    target="formatter",
+    condition=EdgeCondition.ON_SUCCESS,
+    input_mapping={"value_to_format": "result"}
+)
+```
+
+### Required Fields
+
+<ParamField path="id" type="str" required>
+  Unique identifier for the edge
+</ParamField>
+
+<ParamField path="source" type="str" required>
+  Source node ID
+</ParamField>
+
+<ParamField path="target" type="str" required>
+  Target node ID
+</ParamField>
+
+### When to Traverse
+
+<ParamField path="condition" type="EdgeCondition" default="EdgeCondition.ALWAYS">
+  When this edge should be traversed:
+  - `ALWAYS`: Always after source completes
+  - `ON_SUCCESS`: Only if source succeeds
+  - `ON_FAILURE`: Only if source fails
+  - `CONDITIONAL`: Based on expression evaluation
+  - `LLM_DECIDE`: Let LLM decide based on goal and context
+</ParamField>
+
+<ParamField path="condition_expr" type="str | None" default="None">
+  Expression for CONDITIONAL edges, e.g., `"output.confidence > 0.8"`
+</ParamField>
+
+### Data Flow
+
+<ParamField path="input_mapping" type="dict[str, str]" default="{}">
+  Map source outputs to target inputs: `{target_key: source_key}`
+</ParamField>
+
+### Priority
+
+<ParamField path="priority" type="int" default="0">
+  Higher priority edges are evaluated first when multiple edges exist
+</ParamField>
+
+### Metadata
+
+<ParamField path="description" type="str" default="''">
+  Human-readable description of this edge
+</ParamField>
+
+---
+
+## Edge Conditions
+
+### Enum: EdgeCondition
+
+```python
+from framework.graph import EdgeCondition
+```
+
+<ResponseField name="ALWAYS" type="str">
+  Always traverse after source completes
+</ResponseField>
+
+<ResponseField name="ON_SUCCESS" type="str">
+  Only traverse if source succeeds
+</ResponseField>
+
+<ResponseField name="ON_FAILURE" type="str">
+  Only traverse if source fails
+</ResponseField>
+
+<ResponseField name="CONDITIONAL" type="str">
+  Traverse based on expression evaluation (safe subset only)
+</ResponseField>
+
+<ResponseField name="LLM_DECIDE" type="str">
+  Let LLM decide based on goal and context (goal-aware routing)
+</ResponseField>
+
+---
+
+## Methods
+
+### should_traverse()
+
+Determine if this edge should be traversed.
+
+```python
+await edge.should_traverse(
+    source_success=True,
+    source_output={"result": 42, "confidence": 0.9},
+    memory={"total": 100},
+    llm=llm_provider,
+    goal=goal_obj
+)
+```
+
+<ParamField path="source_success" type="bool" required>
+  Whether the source node succeeded
+</ParamField>
+
+<ParamField path="source_output" type="dict[str, Any]" required>
+  Output from the source node
+</ParamField>
+
+<ParamField path="memory" type="dict[str, Any]" required>
+  Current shared memory state
+</ParamField>
+
+<ParamField path="llm" type="LLMProvider | None" default="None">
+  LLM provider for LLM_DECIDE edges
+</ParamField>
+
+<ParamField path="goal" type="Goal | None" default="None">
+  Goal object for LLM_DECIDE edges
+</ParamField>
+
+<ResponseField name="should_traverse" type="bool">
+  True if the edge should be traversed
+</ResponseField>
+
+---
+
+### map_inputs()
+
+Map source outputs to target inputs.
+
+```python
+target_inputs = edge.map_inputs(
+    source_output={"result": 42},
+    memory={"total": 100}
+)
+# Returns: {"value_to_format": 42}
+```
+
+<ParamField path="source_output" type="dict[str, Any]" required>
+  Output from source node
+</ParamField>
+
+<ParamField path="memory" type="dict[str, Any]" required>
+  Current shared memory
+</ParamField>
+
+<ResponseField name="inputs" type="dict[str, Any]">
+  Input dict for target node
+</ResponseField>
+
+---
+
+## Examples
+
+### Simple Success-Based Routing
+
+```python
+EdgeSpec(
+    id="calc-to-format",
+    source="calculator",
+    target="formatter",
+    condition=EdgeCondition.ON_SUCCESS,
+    input_mapping={"value_to_format": "result"}
+)
+```
+
+### Conditional Routing
+
+```python
+# Only proceed if confidence is high
+EdgeSpec(
+    id="validate-to-publish",
+    source="validator",
+    target="publisher",
+    condition=EdgeCondition.CONDITIONAL,
+    condition_expr="output.confidence > 0.8",
+    description="Only publish if validation confidence > 80%"
+)
+
+# Route based on memory value
+EdgeSpec(
+    id="check-to-retry",
+    source="api-call",
+    target="retry-handler",
+    condition=EdgeCondition.CONDITIONAL,
+    condition_expr="retries < 3 and error_type == 'rate_limit'",
+)
+```
+
+### LLM-Powered Routing (Goal-Aware)
+
+```python
+EdgeSpec(
+    id="search-to-filter",
+    source="search_results",
+    target="filter_results",
+    condition=EdgeCondition.LLM_DECIDE,
+    description="Only filter if results need refinement to meet goal",
+)
+```
+
+The LLM evaluates:
+- Current goal and success criteria
+- Source node output
+- Shared memory state
+- Edge description
+
+And decides whether proceeding is the best next step.
+
+### Priority-Based Routing
+
+```python
+# High priority: error handling
+EdgeSpec(
+    id="node-to-error",
+    source="processor",
+    target="error_handler",
+    condition=EdgeCondition.ON_FAILURE,
+    priority=100,  # Evaluated first
+)
+
+# Lower priority: normal flow
+EdgeSpec(
+    id="node-to-next",
+    source="processor",
+    target="next_step",
+    condition=EdgeCondition.ON_SUCCESS,
+    priority=0,
+)
+```
+
+### Fallback Routing
+
+```python
+# Primary path
+EdgeSpec(
+    id="primary-path",
+    source="analyzer",
+    target="fast-processor",
+    condition=EdgeCondition.CONDITIONAL,
+    condition_expr="output.complexity < 5",
+    priority=10,
+)
+
+# Fallback path
+EdgeSpec(
+    id="fallback-path",
+    source="analyzer",
+    target="thorough-processor",
+    condition=EdgeCondition.ALWAYS,
+    priority=0,  # Lower priority
+)
+```
+
+---
+
+## Conditional Expression Syntax
+
+For `CONDITIONAL` edges, the `condition_expr` is evaluated using a safe subset of Python:
+
+### Available Context
+
+- `output`: Source node output dict
+- `memory`: Shared memory dict
+- `result`: Shorthand for `output.get("result")`
+- `true` / `false`: Boolean literals
+- All memory keys are also available directly
+
+### Supported Operators
+
+- Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`
+- Logical: `and`, `or`, `not`
+- Membership: `in`, `not in`
+- Arithmetic: `+`, `-`, `*`, `/`, `%`
+- Attribute access: `output.key`
+- Indexing: `output["key"]`
+
+### Examples
+
+```python
+# Simple comparison
+"output.confidence > 0.8"
+
+# Multiple conditions
+"output.status == 'ready' and retries < 3"
+
+# Memory access
+"total_processed < max_items"
+
+# Attribute access
+"output.metadata.priority == 'high'"
+
+# List membership
+"output.category in ['A', 'B', 'C']"
+
+# Complex logic
+"(output.score > 90 or priority == 'urgent') and not already_processed"
+```
+
+### Security
+
+- Only safe operations are allowed (no `exec`, `eval`, imports, etc.)
+- AST-based whitelist validation
+- Expressions are sandboxed
+
+---
+
+## Input Mapping
+
+The `input_mapping` field maps source node outputs to target node inputs:
+
+```python
+input_mapping = {
+    "target_key": "source_key",
+    "amount": "calculated_total",
+    "recipient": "validated_email",
+}
+```
+
+### Default Behavior
+
+If `input_mapping` is empty, all source outputs are passed through to the target.
+
+### Resolution Order
+
+1. Try source output first
+2. Fall back to memory if not in output
+
+### Example
+
+```python
+# Source output
+source_output = {"result": 42, "status": "ok"}
+
+# Shared memory
+memory = {"user_id": 123, "total": 100}
+
+# Edge with mapping
+edge = EdgeSpec(
+    source="calculator",
+    target="formatter",
+    input_mapping={
+        "value": "result",        # From source output
+        "user": "user_id",         # From memory (not in output)
+        "format": "display_mode",  # Will be None (not in either)
+    }
+)
+
+target_inputs = edge.map_inputs(source_output, memory)
+# Result: {"value": 42, "user": 123}
+```
+
+---
+
+## Graph Patterns
+
+### Sequential Flow
+
+```python
+edges = [
+    EdgeSpec(id="1", source="A", target="B", condition=EdgeCondition.ALWAYS),
+    EdgeSpec(id="2", source="B", target="C", condition=EdgeCondition.ALWAYS),
+    EdgeSpec(id="3", source="C", target="D", condition=EdgeCondition.ALWAYS),
+]
+```
+
+### Parallel Fan-Out
+
+```python
+# Process executes A, B, C in parallel
+edges = [
+    EdgeSpec(id="1", source="process", target="A", condition=EdgeCondition.ON_SUCCESS),
+    EdgeSpec(id="2", source="process", target="B", condition=EdgeCondition.ON_SUCCESS),
+    EdgeSpec(id="3", source="process", target="C", condition=EdgeCondition.ON_SUCCESS),
+]
+```
+
+### Conditional Branch
+
+```python
+edges = [
+    EdgeSpec(
+        id="1",
+        source="validator",
+        target="processor_A",
+        condition=EdgeCondition.CONDITIONAL,
+        condition_expr="output.category == 'A'",
+        priority=10,
+    ),
+    EdgeSpec(
+        id="2",
+        source="validator",
+        target="processor_B",
+        condition=EdgeCondition.CONDITIONAL,
+        condition_expr="output.category == 'B'",
+        priority=10,
+    ),
+    EdgeSpec(
+        id="3",
+        source="validator",
+        target="default_processor",
+        condition=EdgeCondition.ALWAYS,
+        priority=0,  # Fallback
+    ),
+]
+```
+
+### Error Handling
+
+```python
+edges = [
+    EdgeSpec(
+        id="success",
+        source="risky-operation",
+        target="next-step",
+        condition=EdgeCondition.ON_SUCCESS,
+    ),
+    EdgeSpec(
+        id="failure",
+        source="risky-operation",
+        target="error-handler",
+        condition=EdgeCondition.ON_FAILURE,
+    ),
+]
+```
+
+### Feedback Loop
+
+```python
+# Retry up to 3 times
+edges = [
+    EdgeSpec(
+        id="retry",
+        source="processor",
+        target="processor",  # Self-loop
+        condition=EdgeCondition.CONDITIONAL,
+        condition_expr="not output.success and retries < 3",
+    ),
+    EdgeSpec(
+        id="success",
+        source="processor",
+        target="next-step",
+        condition=EdgeCondition.ON_SUCCESS,
+    ),
+]
+```

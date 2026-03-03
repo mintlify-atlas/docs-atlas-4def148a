@@ -1,0 +1,410 @@
+---
+title: 'Self-Hosting Guide'
+description: 'Deploy and run the Hive agent framework on your own infrastructure'
+icon: 'server'
+---
+
+## Overview
+
+This guide walks you through self-hosting the Hive agent framework on your own infrastructure. You'll learn how to install dependencies, configure the environment, and run agents locally or on a server.
+
+## Prerequisites
+
+- **Python 3.11+** - Required for the core framework
+- **Node.js 20+** - Required for the web dashboard (optional)
+- **uv** - Fast Python package installer (installed automatically by quickstart)
+
+## Quick Start
+
+The easiest way to get started is with the interactive quickstart script:
+
+<Steps>
+  <Step title="Clone the Repository">
+    ```bash
+    git clone https://github.com/yourusername/hive.git
+    cd hive
+    ```
+  </Step>
+
+  <Step title="Run Quickstart">
+    ```bash
+    bash quickstart.sh
+    ```
+
+    The script will:
+    - Verify Python 3.11+ installation
+    - Install `uv` package manager if missing
+    - Install workspace packages (core + tools)
+    - Install Playwright browser for web scraping
+    - Configure your LLM provider
+    - Initialize the credential store
+    - Build the frontend dashboard
+    - Install the `hive` CLI globally
+  </Step>
+
+  <Step title="Verify Installation">
+    ```bash
+    hive --version
+    ```
+  </Step>
+</Steps>
+
+## Manual Installation
+
+If you prefer manual setup, follow these steps:
+
+### 1. Install Python Dependencies
+
+```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+
+# Install workspace packages
+cd /path/to/hive
+uv sync
+
+# Install Playwright browser
+uv run python -m playwright install chromium
+```
+
+### 2. Configure LLM Provider
+
+Set your API key as an environment variable:
+
+```bash
+# For Anthropic (Claude)
+export ANTHROPIC_API_KEY="your-api-key-here"
+
+# For OpenAI
+export OPENAI_API_KEY="your-api-key-here"
+
+# For Google Gemini
+export GEMINI_API_KEY="your-api-key-here"
+```
+
+Create configuration file at `~/.hive/configuration.json`:
+
+```json
+{
+  "llm": {
+    "provider": "anthropic",
+    "model": "claude-opus-4-6",
+    "max_tokens": 32768,
+    "api_key_env_var": "ANTHROPIC_API_KEY"
+  },
+  "gcu_enabled": true,
+  "created_at": "2026-03-03T00:00:00+00:00"
+}
+```
+
+### 3. Initialize Credential Store
+
+Generate an encryption key for the credential store:
+
+```bash
+# Generate encryption key
+export HIVE_CREDENTIAL_KEY=$(uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+
+# Save to your shell config
+echo "export HIVE_CREDENTIAL_KEY='$HIVE_CREDENTIAL_KEY'" >> ~/.bashrc
+```
+
+The credential store will be initialized at `~/.hive/credentials/`.
+
+### 4. Build Frontend (Optional)
+
+If you want the web dashboard:
+
+```bash
+cd core/frontend
+npm install
+npm run build
+```
+
+### 5. Install CLI
+
+Make the `hive` CLI globally accessible:
+
+```bash
+mkdir -p ~/.local/bin
+ln -s $(pwd)/hive ~/.local/bin/hive
+
+# Add to PATH if needed
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+## Directory Structure
+
+After installation, your Hive installation will have this structure:
+
+```
+~/.hive/
+├── configuration.json      # LLM and runtime config
+├── credentials/            # Encrypted credential storage
+│   ├── credentials/        # Encrypted credential files
+│   └── metadata/           # Credential metadata index
+├── secrets/
+│   └── credential_key      # Encryption key (chmod 600)
+└── agents/                 # Agent storage directories
+    └── {agent-name}/
+        ├── browser/        # Browser profiles
+        └── storage/        # Agent-specific data
+```
+
+## Running Agents
+
+### CLI Interface
+
+Run an agent from the command line:
+
+```bash
+# Run an exported agent
+uv run python -m framework.runner.cli exports/my-agent \
+  --input '{"query": "Research quantum computing"}'
+```
+
+### TUI Dashboard
+
+Launch the interactive terminal dashboard:
+
+```bash
+hive tui
+```
+
+The TUI allows you to:
+- Browse available agents
+- Start/stop agent execution
+- View real-time logs
+- Monitor token usage
+
+### Web Dashboard
+
+Start the web server:
+
+```bash
+hive serve
+
+# Or with custom port
+hive serve --port 8080
+
+# Auto-open browser
+hive serve --open
+```
+
+Access the dashboard at `http://localhost:8787`.
+
+## Environment Variables
+
+### Required
+
+<ParamField path="HIVE_CREDENTIAL_KEY" type="string" required>
+  Fernet encryption key for credential storage. Generate with:
+  ```bash
+  python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  ```
+</ParamField>
+
+### Optional
+
+<ParamField path="ANTHROPIC_API_KEY" type="string">
+  Anthropic API key for Claude models
+</ParamField>
+
+<ParamField path="OPENAI_API_KEY" type="string">
+  OpenAI API key for GPT models
+</ParamField>
+
+<ParamField path="GEMINI_API_KEY" type="string">
+  Google Gemini API key
+</ParamField>
+
+<ParamField path="BRAVE_SEARCH_API_KEY" type="string">
+  Brave Search API key for web search tools
+</ParamField>
+
+<ParamField path="HIVE_STORAGE_PATH" type="string">
+  Custom storage path for agent data. Defaults to `~/.hive/agents/{agent-name}`
+</ParamField>
+
+<ParamField path="HIVE_AGENT_NAME" type="string">
+  Agent name for storage paths. Set automatically by AgentRunner.
+</ParamField>
+
+## Docker Deployment
+
+### Dockerfile
+
+Create a Dockerfile for containerized deployment:
+
+```dockerfile
+FROM python:3.12-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# Copy source
+WORKDIR /app
+COPY . .
+
+# Install dependencies
+RUN uv sync
+RUN uv run python -m playwright install chromium --with-deps
+
+# Expose ports
+EXPOSE 8787
+
+# Run dashboard
+CMD ["./hive", "serve", "--host", "0.0.0.0"]
+```
+
+### Docker Compose
+
+```yaml
+version: '3.8'
+
+services:
+  hive:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - HIVE_CREDENTIAL_KEY=${HIVE_CREDENTIAL_KEY}
+    volumes:
+      - ./agents:/app/agents
+      - hive-data:/root/.hive
+
+volumes:
+  hive-data:
+```
+
+Run with:
+
+```bash
+docker-compose up -d
+```
+
+## Production Considerations
+
+### Security
+
+<AccordionGroup>
+  <Accordion title="Credential Storage">
+    - Store `HIVE_CREDENTIAL_KEY` in a secrets manager (AWS Secrets Manager, HashiCorp Vault)
+    - Never commit credential files to version control
+    - Use encrypted volumes for `~/.hive/credentials/`
+    - Rotate encryption keys periodically
+  </Accordion>
+
+  <Accordion title="API Keys">
+    - Use environment variables, never hardcode
+    - Implement rate limiting for API calls
+    - Monitor API usage and set alerts
+    - Use separate keys for dev/staging/prod
+  </Accordion>
+
+  <Accordion title="Network">
+    - Run dashboard behind a reverse proxy (nginx, Caddy)
+    - Enable HTTPS with valid certificates
+    - Implement authentication for web access
+    - Use firewall rules to restrict access
+  </Accordion>
+</AccordionGroup>
+
+### Performance
+
+- **LLM Caching**: Enable prompt caching for providers that support it (Anthropic Claude)
+- **Browser Sessions**: Reuse browser contexts instead of launching new browsers
+- **Concurrent Agents**: Use async execution for multiple agents
+- **Resource Limits**: Set memory/CPU limits in Docker
+
+### Monitoring
+
+```python
+# Enable debug logging
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Monitor token usage
+result = await runner.run(input_data)
+print(f"Input tokens: {result.metrics.input_tokens}")
+print(f"Output tokens: {result.metrics.output_tokens}")
+```
+
+## Troubleshooting
+
+### Common Issues
+
+<AccordionGroup>
+  <Accordion title="Python Version Error">
+    **Error**: `Python 3.11+ is required`
+
+    **Solution**: Install Python 3.11 or newer:
+    ```bash
+    # macOS
+    brew install python@3.12
+
+    # Ubuntu/Debian
+    sudo apt install python3.12
+    ```
+  </Accordion>
+
+  <Accordion title="Playwright Installation Fails">
+    **Error**: `playwright install chromium failed`
+
+    **Solution**: Install system dependencies:
+    ```bash
+    # Ubuntu/Debian
+    sudo apt-get install -y libnss3 libatk1.0-0 libatk-bridge2.0-0
+
+    # Then retry
+    uv run python -m playwright install chromium --with-deps
+    ```
+  </Accordion>
+
+  <Accordion title="Credential Decryption Error">
+    **Error**: `Failed to decrypt credential`
+
+    **Solution**: Verify `HIVE_CREDENTIAL_KEY` is set correctly:
+    ```bash
+    echo $HIVE_CREDENTIAL_KEY
+    # Should print a base64-encoded key
+
+    # If empty, regenerate and reconfigure credentials
+    ```
+  </Accordion>
+
+  <Accordion title="Port Already in Use">
+    **Error**: `Address already in use: 8787`
+
+    **Solution**: Use a different port:
+    ```bash
+    hive serve --port 8080
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Credential Management" icon="key" href="/guides/credential-management">
+    Learn how to securely store and manage API credentials
+  </Card>
+  <Card title="LLM Providers" icon="brain" href="/guides/llm-providers">
+    Configure different LLM providers and models
+  </Card>
+  <Card title="MCP Integration" icon="plug" href="/guides/mcp-integration">
+    Connect external MCP servers for tool access
+  </Card>
+  <Card title="Browser Automation" icon="globe" href="/guides/browser-automation">
+    Enable browser control for web automation tasks
+  </Card>
+</CardGroup>

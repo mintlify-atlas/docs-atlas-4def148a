@@ -1,0 +1,598 @@
+---
+title: 'LLM Provider Setup'
+description: 'Configure and use different LLM providers with Hive agents'
+icon: 'brain'
+---
+
+## Overview
+
+The Hive framework uses LiteLLM to provide unified access to multiple LLM providers through a single interface. This allows you to switch between providers seamlessly without changing your agent code.
+
+## Supported Providers
+
+<CardGroup cols={3}>
+  <Card title="Anthropic" icon="a">
+    Claude Opus, Sonnet, Haiku models with extended context
+  </Card>
+  <Card title="OpenAI" icon="circle">
+    GPT-4o, GPT-4 Turbo, GPT-3.5, o1 reasoning models
+  </Card>
+  <Card title="Google" icon="google">
+    Gemini Pro, Gemini Flash with multimodal support
+  </Card>
+  <Card title="DeepSeek" icon="magnifying-glass">
+    DeepSeek Chat, Coder, Reasoner models
+  </Card>
+  <Card title="Groq" icon="bolt">
+    Ultra-fast inference with Llama, Mixtral models
+  </Card>
+  <Card title="Cerebras" icon="microchip">
+    Fast inference with GLM and Qwen models
+  </Card>
+</CardGroup>
+
+## Quick Setup via Quickstart
+
+The interactive quickstart script guides you through provider configuration:
+
+```bash
+bash quickstart.sh
+```
+
+You'll be prompted to choose from:
+
+### Subscription Modes (No API Key Purchase)
+
+<Steps>
+  <Step title="Claude Code Subscription">
+    Use your Claude Max/Pro plan for API access.
+
+    **Setup:** Run `claude` CLI to authenticate, then select option 1 in quickstart.
+
+    **Models:** claude-opus-4-6, claude-sonnet-4-5-20250929
+  </Step>
+
+  <Step title="ZAI Code Subscription">
+    Use your ZAI Code plan for API access.
+
+    **Setup:** Provide ZAI API key when prompted.
+
+    **Models:** glm-5 (32K context)
+  </Step>
+
+  <Step title="OpenAI Codex Subscription">
+    Use your ChatGPT Plus plan for API access.
+
+    **Setup:** Authenticate via OAuth when prompted.
+
+    **Models:** gpt-5.3-codex
+  </Step>
+</Steps>
+
+### API Key Providers
+
+<Steps>
+  <Step title="Anthropic (Recommended)">
+    Get API key: https://console.anthropic.com/settings/keys
+
+    **Models:** claude-opus-4-6, claude-sonnet-4-5, claude-haiku-4-5
+  </Step>
+
+  <Step title="OpenAI">
+    Get API key: https://platform.openai.com/api-keys
+
+    **Models:** gpt-5.2, gpt-5-mini, gpt-4o, gpt-4-turbo
+  </Step>
+
+  <Step title="Google Gemini (Free Tier)">
+    Get API key: https://aistudio.google.com/apikey
+
+    **Models:** gemini-3-flash-preview, gemini-3.1-pro-preview
+  </Step>
+
+  <Step title="Groq (Fast, Free Tier)">
+    Get API key: https://console.groq.com/keys
+
+    **Models:** moonshotai/kimi-k2-instruct-0905, openai/gpt-oss-120b
+  </Step>
+
+  <Step title="Cerebras (Fast, Free Tier)">
+    Get API key: https://cloud.cerebras.ai/
+
+    **Models:** zai-glm-4.7, qwen3-235b-a22b-instruct-2507
+  </Step>
+</Steps>
+
+## Manual Configuration
+
+### Set Environment Variables
+
+Add your API key to your shell configuration:
+
+```bash
+# Anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# OpenAI
+export OPENAI_API_KEY="sk-..."
+
+# Google Gemini
+export GEMINI_API_KEY="AI..."
+
+# Groq
+export GROQ_API_KEY="gsk_..."
+
+# Cerebras
+export CEREBRAS_API_KEY="csk-..."
+
+# DeepSeek
+export DEEPSEEK_API_KEY="sk-..."
+```
+
+Add to `~/.bashrc` or `~/.zshrc` for persistence:
+
+```bash
+echo 'export ANTHROPIC_API_KEY="your-key"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### Create Configuration File
+
+Create `~/.hive/configuration.json`:
+
+```json
+{
+  "llm": {
+    "provider": "anthropic",
+    "model": "claude-opus-4-6",
+    "max_tokens": 32768,
+    "api_key_env_var": "ANTHROPIC_API_KEY"
+  },
+  "created_at": "2026-03-03T00:00:00+00:00"
+}
+```
+
+## Provider-Specific Setup
+
+### Anthropic (Claude)
+
+<Tabs>
+  <Tab title="API Key">
+    ```json
+    {
+      "llm": {
+        "provider": "anthropic",
+        "model": "claude-opus-4-6",
+        "max_tokens": 32768,
+        "api_key_env_var": "ANTHROPIC_API_KEY"
+      }
+    }
+    ```
+
+    **Available Models:**
+    - `claude-opus-4-6` - Most capable (recommended)
+    - `claude-sonnet-4-5-20250929` - Best balance
+    - `claude-sonnet-4-20250514` - Fast + capable
+    - `claude-haiku-4-5-20251001` - Fast + cheap
+  </Tab>
+
+  <Tab title="Claude Code Subscription">
+    ```json
+    {
+      "llm": {
+        "provider": "anthropic",
+        "model": "claude-opus-4-6",
+        "max_tokens": 32768,
+        "use_claude_code_subscription": true
+      }
+    }
+    ```
+
+    **Setup:** Authenticate with `claude` CLI first:
+    ```bash
+    claude
+    ```
+
+    Token auto-refresh from `~/.claude/.credentials.json`.
+  </Tab>
+</Tabs>
+
+### OpenAI
+
+<Tabs>
+  <Tab title="API Key">
+    ```json
+    {
+      "llm": {
+        "provider": "openai",
+        "model": "gpt-5.2",
+        "max_tokens": 16384,
+        "api_key_env_var": "OPENAI_API_KEY"
+      }
+    }
+    ```
+
+    **Available Models:**
+    - `gpt-5.2` - Most capable (recommended)
+    - `gpt-5-mini` - Fast + cheap
+    - `gpt-4o` - Multimodal flagship
+    - `gpt-4-turbo` - Fast GPT-4
+    - `o1` - Reasoning model
+  </Tab>
+
+  <Tab title="Codex Subscription">
+    ```json
+    {
+      "llm": {
+        "provider": "openai",
+        "model": "gpt-5.3-codex",
+        "max_tokens": 16384,
+        "use_codex_subscription": true
+      }
+    }
+    ```
+
+    **Setup:** OAuth authentication via quickstart or:
+    ```bash
+    uv run python core/codex_oauth.py
+    ```
+  </Tab>
+</Tabs>
+
+### Google Gemini
+
+```json
+{
+  "llm": {
+    "provider": "gemini",
+    "model": "gemini-3-flash-preview",
+    "max_tokens": 8192,
+    "api_key_env_var": "GEMINI_API_KEY"
+  }
+}
+```
+
+**Available Models:**
+- `gemini-3-flash-preview` - Fast (recommended)
+- `gemini-3.1-pro-preview` - Best quality
+- `gemini-1.5-pro` - Extended context (2M tokens)
+
+### DeepSeek
+
+```json
+{
+  "llm": {
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+    "max_tokens": 8192,
+    "api_key_env_var": "DEEPSEEK_API_KEY"
+  }
+}
+```
+
+**Available Models:**
+- `deepseek-chat` - General purpose
+- `deepseek-coder` - Code generation
+- `deepseek-reasoner` - Chain-of-thought reasoning
+
+### Groq
+
+```json
+{
+  "llm": {
+    "provider": "groq",
+    "model": "moonshotai/kimi-k2-instruct-0905",
+    "max_tokens": 8192,
+    "api_key_env_var": "GROQ_API_KEY"
+  }
+}
+```
+
+**Available Models:**
+- `moonshotai/kimi-k2-instruct-0905` - Best quality (recommended)
+- `openai/gpt-oss-120b` - Fast reasoning
+- `llama3-70b` - Llama 3 70B
+- `mixtral-8x7b` - Mixtral MoE
+
+### Cerebras
+
+```json
+{
+  "llm": {
+    "provider": "cerebras",
+    "model": "zai-glm-4.7",
+    "max_tokens": 8192,
+    "api_key_env_var": "CEREBRAS_API_KEY"
+  }
+}
+```
+
+**Available Models:**
+- `zai-glm-4.7` - Best quality (recommended)
+- `qwen3-235b-a22b-instruct-2507` - Frontier reasoning
+
+### ZAI Code
+
+```json
+{
+  "llm": {
+    "provider": "openai",
+    "model": "glm-5",
+    "max_tokens": 32768,
+    "api_key_env_var": "ZAI_API_KEY",
+    "api_base": "https://api.z.ai/api/coding/paas/v4"
+  }
+}
+```
+
+## Using in Code
+
+### Basic Usage
+
+```python
+from framework.llm.litellm import LiteLLMProvider
+
+# Initialize provider (reads from env var)
+provider = LiteLLMProvider(model="claude-opus-4-6")
+
+# Generate completion
+response = provider.complete(
+    messages=[{"role": "user", "content": "Explain quantum computing"}],
+    max_tokens=1024
+)
+
+print(response.content)
+```
+
+### With Custom API Key
+
+```python
+provider = LiteLLMProvider(
+    model="gpt-5.2",
+    api_key="your-api-key-here"
+)
+```
+
+### With Custom API Base
+
+```python
+# For proxies or local deployments
+provider = LiteLLMProvider(
+    model="gpt-4o-mini",
+    api_base="https://my-proxy.com/v1"
+)
+```
+
+### Async Completion
+
+```python
+import asyncio
+
+async def main():
+    provider = LiteLLMProvider(model="claude-opus-4-6")
+
+    response = await provider.acomplete(
+        messages=[{"role": "user", "content": "Hello!"}],
+        max_tokens=1024
+    )
+
+    print(response.content)
+
+asyncio.run(main())
+```
+
+### Streaming
+
+```python
+import asyncio
+
+async def main():
+    provider = LiteLLMProvider(model="claude-opus-4-6")
+
+    async for event in provider.stream(
+        messages=[{"role": "user", "content": "Write a story"}],
+        max_tokens=2048
+    ):
+        if event.type == "text_delta":
+            print(event.content, end="", flush=True)
+
+asyncio.run(main())
+```
+
+### With Tools
+
+```python
+from framework.llm.provider import Tool
+
+tools = [
+    Tool(
+        name="web_search",
+        description="Search the web",
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"}
+            },
+            "required": ["query"]
+        }
+    )
+]
+
+response = provider.complete(
+    messages=[{"role": "user", "content": "Search for quantum computing"}],
+    tools=tools,
+    max_tokens=1024
+)
+```
+
+## Model Selection Guide
+
+### By Use Case
+
+<AccordionGroup>
+  <Accordion title="Complex Reasoning">
+    **Best:**
+    - `claude-opus-4-6` (Anthropic)
+    - `gpt-5.2` (OpenAI)
+    - `o1` (OpenAI - specialized reasoning)
+
+    **Context:** Up to 200K tokens with Claude
+  </Accordion>
+
+  <Accordion title="Fast Iteration">
+    **Best:**
+    - `claude-haiku-4-5` (Anthropic)
+    - `gpt-5-mini` (OpenAI)
+    - `gemini-3-flash` (Google)
+    - `llama3-70b` on Groq (ultra-fast)
+
+    **Latency:** < 1s with Groq, ~2s with others
+  </Accordion>
+
+  <Accordion title="Code Generation">
+    **Best:**
+    - `deepseek-coder` (DeepSeek)
+    - `claude-sonnet-4-5` (Anthropic)
+    - `gpt-4o` (OpenAI)
+
+    **Tools:** All support function calling
+  </Accordion>
+
+  <Accordion title="Cost Optimization">
+    **Best:**
+    - `gemini-3-flash` (Free tier)
+    - `llama3-70b` on Groq (Free tier)
+    - `gpt-5-mini` (Cheap)
+
+    **Free Tiers:** Gemini, Groq, Cerebras
+  </Accordion>
+
+  <Accordion title="Long Context">
+    **Best:**
+    - `claude-opus-4-6` (200K tokens)
+    - `gemini-1.5-pro` (2M tokens)
+    - `gpt-4-turbo` (128K tokens)
+
+    **Note:** Context costs scale linearly
+  </Accordion>
+</AccordionGroup>
+
+### By Budget
+
+| Budget | Model | Provider | Notes |
+|--------|-------|----------|-------|
+| Free | gemini-3-flash | Google | Free tier available |
+| Free | llama3-70b | Groq | Fast, free tier |
+| Low | gpt-5-mini | OpenAI | $0.10/1M tokens |
+| Low | claude-haiku-4-5 | Anthropic | $0.25/1M tokens |
+| Medium | claude-sonnet-4-5 | Anthropic | $3/1M tokens |
+| Medium | gpt-4o | OpenAI | $5/1M tokens |
+| High | claude-opus-4-6 | Anthropic | $15/1M tokens |
+| High | gpt-5.2 | OpenAI | $20/1M tokens |
+
+## Advanced Features
+
+### Rate Limit Handling
+
+Automatic retry with exponential backoff:
+
+```python
+response = provider.complete(
+    messages=messages,
+    max_tokens=1024,
+    max_retries=5  # Override default (10)
+)
+```
+
+### Token Estimation
+
+```python
+# Estimate tokens before sending
+from framework.llm.litellm import _estimate_tokens
+
+count, method = _estimate_tokens(
+    model="claude-opus-4-6",
+    messages=messages
+)
+print(f"Estimated tokens: {count} ({method})")
+```
+
+### Failed Request Debugging
+
+Failed requests are automatically dumped to:
+```
+~/.hive/failed_requests/
+├── empty_response_claude-opus-4-6_20260303_120000_123456.json
+├── rate_limit_gpt-4o_20260303_120100_234567.json
+└── ...
+```
+
+Each dump includes:
+- Full request payload
+- Error type and attempt number
+- Token count estimate
+- Timestamp
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="API Key Not Found">
+    **Error**: `AuthenticationError: API key not found`
+
+    **Solution:**
+    ```bash
+    # Check if env var is set
+    echo $ANTHROPIC_API_KEY
+
+    # Set it
+    export ANTHROPIC_API_KEY="your-key"
+
+    # Or add to config
+    # ~/.hive/configuration.json: "api_key_env_var": "ANTHROPIC_API_KEY"
+    ```
+  </Accordion>
+
+  <Accordion title="Rate Limit Exceeded">
+    **Error**: `RateLimitError: 429 Rate limit exceeded`
+
+    **Solution:**
+    - Framework retries automatically with backoff
+    - Check server-provided `retry-after` header
+    - Reduce concurrency
+    - Upgrade to higher tier plan
+  </Accordion>
+
+  <Accordion title="Empty Response">
+    **Error**: Empty content returned
+
+    **Causes:**
+    - Rate limit (stealth 200 instead of 429)
+    - Context window exceeded
+    - finish_reason=length (max_tokens too low)
+
+    **Solution:**
+    - Check `~/.hive/failed_requests/` for dumps
+    - Increase `max_tokens`
+    - Reduce context length
+  </Accordion>
+
+  <Accordion title="Context Window Exceeded">
+    **Error**: `BadRequestError: maximum context length exceeded`
+
+    **Solution:**
+    - Use model with larger context (e.g., claude-opus-4-6)
+    - Implement message compaction
+    - Summarize earlier conversation turns
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Credential Management" icon="key" href="/guides/credential-management">
+    Securely manage API keys
+  </Card>
+  <Card title="Self-Hosting" icon="server" href="/guides/self-hosting">
+    Deploy your own Hive instance
+  </Card>
+</CardGroup>

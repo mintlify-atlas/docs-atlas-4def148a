@@ -1,0 +1,458 @@
+---
+title: Testing Agents
+description: Test framework for validating agent behavior and outputs
+---
+
+# Testing Agents
+
+Hive provides a goal-based testing framework that generates tests from your agent's success criteria and constraints.
+
+## Testing Framework Overview
+
+Tests in Hive are:
+- **Goal-Driven** - Generated from success criteria and constraints
+- **LLM-Evaluated** - Use LLM judges for complex assertions
+- **Approval-Required** - All generated tests require human approval
+- **Pytest-Compatible** - Standard pytest format for execution
+
+## Test Types
+
+Three types of tests validate different aspects:
+
+### Constraint Tests
+
+Validate that constraints are respected:
+
+```python
+from framework.testing import Test, TestType
+
+test = Test(
+    id="test_no_hallucination",
+    goal_id="research-agent",
+    parent_criteria_id="no-hallucination",  # Links to constraint
+    test_type=TestType.CONSTRAINT,
+    test_name="test_constraint_no_hallucination",
+    description="Verify agent only uses information from fetched sources",
+    input={"topic": "quantum computing"},
+    expected_output={
+        "assertions": [
+            "All claims have citations",
+            "No information without source attribution"
+        ]
+    },
+)
+```
+
+### Success Criteria Tests
+
+Validate achievement of success criteria:
+
+```python
+test = Test(
+    id="test_source_diversity",
+    goal_id="research-agent",
+    parent_criteria_id="source-diversity",
+    test_type=TestType.SUCCESS_CRITERIA,
+    test_name="test_success_source_diversity",
+    description="Verify agent uses multiple diverse sources",
+    input={"topic": "artificial intelligence"},
+    expected_output={
+        "min_sources": 5,
+        "source_types": ["academic", "news", "documentation"]
+    },
+)
+```
+
+### Edge Case Tests
+
+Validate handling of unusual inputs:
+
+```python
+test = Test(
+    id="test_empty_input",
+    goal_id="calculator",
+    parent_criteria_id="accuracy",
+    test_type=TestType.EDGE_CASE,
+    test_name="test_edge_empty_input",
+    description="Handle empty input gracefully",
+    input={"expression": ""},
+    expected_output={"error": "Invalid input"},
+)
+```
+
+## Test Generation
+
+Generate tests from your goal definition:
+
+### Generate Constraint Tests
+
+```bash
+# Generate tests for constraints
+uv run python -m framework test-generate exports/my_agent --goal my-goal --type constraint
+```
+
+This analyzes your goal's constraints and generates pytest-compatible tests.
+
+### Generate Success Criteria Tests
+
+```bash
+# Generate tests for success criteria
+uv run python -m framework test-generate exports/my_agent --goal my-goal --type outcome
+```
+
+### MCP Tool Usage
+
+When using the MCP server, tests are generated via tools:
+
+```python
+# In Claude with MCP tools available
+generate_constraint_tests(goal_id="my-goal")
+generate_success_tests(goal_id="my-goal")
+```
+
+The tools return **guidelines**, not code. Claude writes the actual test files using the Write tool based on these guidelines.
+
+## Test Approval
+
+All generated tests require approval:
+
+```python
+from framework.testing import Test, ApprovalStatus
+
+# Test starts in PENDING state
+test = Test(
+    id="test_1",
+    approval_status=ApprovalStatus.PENDING,
+    # ... other fields
+)
+
+# Approve as-is
+test.approve(approved_by="user")
+
+# Approve with modifications
+test.modify(
+    new_code="modified test code",
+    approved_by="user"
+)
+
+# Reject with reason
+test.reject(reason="Doesn't test the right behavior")
+```
+
+### Approval Status
+
+- `PENDING` - Awaiting user review
+- `APPROVED` - Accepted as-is
+- `MODIFIED` - User edited before accepting
+- `REJECTED` - Declined with reason
+
+**Only approved tests are executed.**
+
+## Test Structure
+
+Tests follow pytest conventions:
+
+```python
+import pytest
+from pathlib import Path
+
+# Test header with framework imports
+from framework.testing.llm_judge import LLMJudge
+from framework.graph import Goal
+
+# Load agent
+from my_agent.agent import default_agent as agent
+
+@pytest.fixture
+def judge():
+    """LLM judge for evaluating outputs."""
+    return LLMJudge(model="claude-haiku-4-5-20251001")
+
+@pytest.mark.asyncio
+async def test_constraint_no_hallucination(judge):
+    """Verify agent only uses information from fetched sources."""
+    # Arrange
+    input_data = {"topic": "quantum computing"}
+    
+    # Act
+    result = await agent.run(input_data)
+    
+    # Assert
+    assert result.success, f"Agent execution failed: {result.error}"
+    
+    # LLM judge evaluation
+    verdict = await judge.evaluate(
+        output=result.output,
+        criteria="All claims must have source citations",
+    )
+    
+    assert verdict.passed, f"Constraint violation: {verdict.feedback}"
+```
+
+## Running Tests
+
+### List Tests
+
+```bash
+# List all tests for an agent
+uv run python -m framework test-list exports/my_agent
+
+# List tests for specific goal
+uv run python -m framework test-list exports/my_agent --goal my-goal
+```
+
+### Run Tests
+
+```bash
+# Run all tests
+uv run python -m framework test-run exports/my_agent
+
+# Run tests for specific goal
+uv run python -m framework test-run exports/my_agent --goal my-goal
+
+# Run in parallel
+uv run python -m framework test-run exports/my_agent --parallel 4
+
+# Run with verbose output
+uv run python -m framework test-run exports/my_agent -v
+```
+
+### Debug Failed Tests
+
+```bash
+# Debug a specific test
+uv run python -m framework test-debug exports/my_agent test_name
+
+# Show detailed failure info
+uv run python -m framework test-debug exports/my_agent test_name --verbose
+```
+
+## LLM Judge
+
+The `LLMJudge` evaluates complex outputs:
+
+```python
+from framework.testing.llm_judge import LLMJudge, JudgeVerdict
+
+judge = LLMJudge(
+    model="claude-haiku-4-5-20251001",  # Fast model for evaluation
+    api_key="your-api-key",
+)
+
+# Evaluate output against criteria
+verdict: JudgeVerdict = await judge.evaluate(
+    output={"report": "...", "sources": [...]},
+    criteria="""
+    The report must:
+    1. Cite at least 5 diverse sources
+    2. Include [1], [2], etc. citation markers
+    3. Cover all research questions
+    """,
+)
+
+if verdict.passed:
+    print("Test passed")
+else:
+    print(f"Test failed: {verdict.feedback}")
+    print(f"Confidence: {verdict.confidence}")
+```
+
+### Judge Response
+
+```python
+@dataclass
+class JudgeVerdict:
+    passed: bool              # True if criteria met
+    feedback: str            # Explanation
+    confidence: float        # 0.0 to 1.0
+    criteria_met: list[str]  # Which criteria passed
+    criteria_failed: list[str]  # Which criteria failed
+```
+
+## Test Storage
+
+Tests are stored alongside your agent:
+
+```
+my_agent/
+├── tests/
+│   ├── __init__.py
+│   ├── test_constraints.py      # Constraint tests
+│   ├── test_success_criteria.py # Success criteria tests
+│   └── test_edge_cases.py       # Edge case tests
+├── test_results/
+│   └── run_20250203_143022.json # Test run results
+└── agent.py
+```
+
+## Test Results
+
+Test runs are logged:
+
+```python
+from framework.testing.test_result import TestResult
+
+result = TestResult(
+    test_id="test_1",
+    passed=True,
+    execution_time_ms=1250,
+    output={"report": "..."},
+    judge_feedback="All criteria met",
+    timestamp="2025-02-03T14:30:22",
+)
+```
+
+Results are stored in `test_results/` with timestamps.
+
+## Real-World Example
+
+Complete test for a research agent:
+
+```python
+import pytest
+from pathlib import Path
+from framework.testing.llm_judge import LLMJudge
+
+# Import agent
+from research_agent.agent import default_agent as agent
+
+@pytest.fixture
+def judge():
+    return LLMJudge(model="claude-haiku-4-5-20251001")
+
+@pytest.mark.asyncio
+async def test_constraint_source_attribution(judge):
+    """
+    Constraint: Every claim must cite its source with numbered reference.
+    
+    This test verifies the agent doesn't hallucinate information and
+    properly attributes all claims to fetched sources.
+    """
+    # Arrange
+    input_data = {
+        "research_topic": "quantum computing applications",
+        "research_questions": [
+            "What are current practical applications?",
+            "What are the main technical challenges?"
+        ]
+    }
+    
+    # Act
+    result = await agent.run(input_data, mock_mode=False)
+    
+    # Assert - basic success
+    assert result.success, f"Agent failed: {result.error}"
+    assert "report" in result.output, "Missing report output"
+    assert "sources" in result.output, "Missing sources output"
+    
+    # Assert - has sources
+    sources = result.output["sources"]
+    assert len(sources) > 0, "No sources provided"
+    
+    # LLM judge evaluation
+    report = result.output["report"]
+    verdict = await judge.evaluate(
+        output={"report": report, "sources": sources},
+        criteria="""
+        Evaluate if the report follows proper citation practices:
+        
+        1. Every factual claim must have a citation marker like [1], [2], etc.
+        2. Citation markers must reference sources in the source list
+        3. No unsupported claims or statements without citations
+        4. The source list must include all cited references
+        
+        A factual claim is any assertion about the topic (not meta-statements
+        like "This report covers..." or "The findings suggest...").
+        """,
+    )
+    
+    assert verdict.passed, (
+        f"Source attribution constraint violated:\n"
+        f"Feedback: {verdict.feedback}\n"
+        f"Confidence: {verdict.confidence}\n"
+        f"Failed criteria: {verdict.criteria_failed}"
+    )
+
+@pytest.mark.asyncio
+async def test_success_source_diversity(judge):
+    """
+    Success Criterion: Use multiple diverse, authoritative sources (>=5).
+    """
+    input_data = {
+        "research_topic": "artificial intelligence ethics",
+        "research_questions": ["What are key ethical concerns?"]
+    }
+    
+    result = await agent.run(input_data)
+    
+    assert result.success
+    sources = result.output.get("sources", [])
+    
+    # Count check
+    assert len(sources) >= 5, (
+        f"Expected >=5 sources, got {len(sources)}"
+    )
+    
+    # Diversity check via judge
+    verdict = await judge.evaluate(
+        output={"sources": sources},
+        criteria="""
+        Sources must be diverse and authoritative:
+        
+        1. At least 3 different source types (academic papers, news, docs, etc.)
+        2. From different domains/publishers
+        3. Recent and authoritative
+        """,
+    )
+    
+    assert verdict.passed, f"Source diversity insufficient: {verdict.feedback}"
+```
+
+## Test Best Practices
+
+<AccordionGroup>
+  <Accordion title="Test One Thing Per Test">
+    Each test should validate a single constraint or success criterion. This makes failures easier to diagnose.
+  </Accordion>
+  
+  <Accordion title="Use LLM Judges for Complex Assertions">
+    For nuanced evaluations (citation quality, coherence, completeness), use `LLMJudge` instead of brittle string matching.
+  </Accordion>
+  
+  <Accordion title="Provide Clear Criteria to Judges">
+    Write explicit, numbered criteria for LLM judges. Vague criteria lead to inconsistent evaluations.
+  </Accordion>
+  
+  <Accordion title="Test with Realistic Inputs">
+    Use representative inputs that match production use cases. Toy inputs may miss real-world failure modes.
+  </Accordion>
+  
+  <Accordion title="Approve All Generated Tests">
+    Review and approve every generated test. LLMs can misinterpret constraints - human oversight is critical.
+  </Accordion>
+</AccordionGroup>
+
+## Continuous Testing
+
+Integrate tests into your development workflow:
+
+```bash
+# Pre-commit hook
+#!/bin/bash
+uv run python -m framework test-run exports/my_agent --goal my-goal
+if [ $? -ne 0 ]; then
+    echo "Tests failed - commit blocked"
+    exit 1
+fi
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Goal Definition" icon="bullseye" href="/building/defining-goals">
+    Define testable success criteria
+  </Card>
+  <Card title="Deployment" icon="rocket" href="/guides/self-hosting">
+    Deploy tested agents to production
+  </Card>
+</CardGroup>

@@ -1,0 +1,541 @@
+---
+title: MCP Builder Tools
+description: Tools and utilities for building Model Context Protocol servers
+---
+
+# MCP Builder Tools
+
+MCP Builder Tools provide utilities and helpers for building robust MCP servers with FastMCP. These tools simplify common patterns and ensure best practices.
+
+## Tool Registration
+
+### register_all_tools
+
+Register all available tools with an MCP server.
+
+```python
+from fastmcp import FastMCP
+from aden_tools.tools import register_all_tools
+from aden_tools.credentials import CredentialStoreAdapter
+
+mcp = FastMCP("my-server")
+credentials = CredentialStoreAdapter.default()
+
+# Register all tools
+tools = register_all_tools(mcp, credentials=credentials)
+print(f"Registered {len(tools)} tools")
+```
+
+### Selective Registration
+
+Register only specific tool categories:
+
+```python
+from fastmcp import FastMCP
+from aden_tools.tools.web_search_tool import register_tools as register_web_search
+from aden_tools.tools.file_system_toolkits.view_file import register_tools as register_view_file
+
+mcp = FastMCP("minimal-server")
+
+# Register only what you need
+register_web_search(mcp, credentials=credentials)
+register_view_file(mcp)
+
+print(f"Registered tools: {list(mcp._tool_manager._tools.keys())}")
+```
+
+## Credential Management
+
+### CredentialStoreAdapter
+
+Manage credentials from multiple sources.
+
+<ParamField path="credential_id" type="string" required>
+  Credential identifier
+</ParamField>
+
+<CodeGroup>
+
+```python Default Store
+from aden_tools.credentials import CredentialStoreAdapter
+
+# Load from ~/.hive/credentials or environment variables
+credentials = CredentialStoreAdapter.default()
+
+# Get a credential
+api_key = credentials.get("brave_search")
+if not api_key:
+    print("Brave Search credentials not configured")
+```
+
+```python Testing
+# Create mock credentials for testing
+creds = CredentialStoreAdapter.for_testing({
+    "brave_search": "test-key-123",
+    "slack": "xoxb-test-token",
+    "github": "ghp_test_token"
+})
+
+api_key = creds.get("brave_search")
+print(api_key)  # "test-key-123"
+```
+
+```python Multi-Account
+# Get credential by account alias
+token = credentials.get_by_alias(
+    credential_id="slack",
+    account_alias="work"
+)
+```
+
+</CodeGroup>
+
+### CredentialSpec
+
+Define credential specifications for tools.
+
+```python
+from aden_tools.credentials.base import CredentialSpec
+
+MY_CREDENTIALS = {
+    "my_api": CredentialSpec(
+        env_var="MY_API_KEY",
+        tools=["my_tool", "my_other_tool"],
+        required=True,
+        help_url="https://example.com/api-keys",
+        description="API key for My Service",
+        credential_id="my_api",
+        credential_key="api_key",
+    )
+}
+```
+
+### Validation
+
+```python
+from aden_tools.credentials import CredentialStoreAdapter, CredentialError
+
+credentials = CredentialStoreAdapter.default()
+
+try:
+    # Validate startup-required credentials
+    credentials.validate_startup()
+    print("Startup credentials validated")
+except CredentialError as e:
+    print(f"Missing credentials: {e}")
+    # Handle error
+```
+
+## Tool Decorators
+
+### @mcp.tool()
+
+Basic tool registration:
+
+```python
+from fastmcp import FastMCP
+
+mcp = FastMCP("server")
+
+@mcp.tool()
+def my_tool(query: str, limit: int = 10) -> dict:
+    """
+    Tool description shown to agents.
+    
+    Args:
+        query: Search query
+        limit: Maximum results
+    
+    Returns:
+        Dict with results or error
+    """
+    return {"results": [...], "total": 10}
+```
+
+### Type Hints
+
+Use Python type hints for automatic parameter validation:
+
+```python
+from typing import Literal, Optional
+from datetime import datetime
+
+@mcp.tool()
+def advanced_tool(
+    # Required parameters
+    query: str,
+    
+    # Optional with defaults
+    limit: int = 10,
+    enabled: bool = True,
+    
+    # Enums
+    mode: Literal["fast", "accurate"] = "fast",
+    
+    # Optional types
+    start_date: Optional[datetime] = None,
+    tags: Optional[list[str]] = None,
+) -> dict:
+    """Advanced tool with type validation."""
+    return {"success": True}
+```
+
+## Error Handling Patterns
+
+### Standard Error Response
+
+```python
+@mcp.tool()
+def my_tool(query: str) -> dict:
+    """Tool with error handling."""
+    
+    # Validation errors
+    if not query:
+        return {"error": "Query is required"}
+    
+    if len(query) > 500:
+        return {
+            "error": "Query too long (max 500 chars)",
+            "max_length": 500,
+            "actual_length": len(query)
+        }
+    
+    try:
+        result = process_query(query)
+        return {
+            "success": True,
+            "data": result
+        }
+    except APIError as e:
+        return {
+            "error": f"API call failed: {str(e)}",
+            "error_code": e.code,
+            "help": "Check your API key and try again"
+        }
+    except Exception as e:
+        return {
+            "error": f"Unexpected error: {str(e)}"
+        }
+```
+
+### Retry Logic
+
+```python
+import time
+from typing import Callable, TypeVar
+
+T = TypeVar('T')
+
+def retry_with_backoff(
+    func: Callable[[], T],
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+) -> T:
+    """Retry a function with exponential backoff."""
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise
+            delay = base_delay * (2 ** attempt)
+            time.sleep(delay)
+    
+    raise RuntimeError("Max retries exceeded")
+
+@mcp.tool()
+def resilient_tool(query: str) -> dict:
+    """Tool with retry logic."""
+    try:
+        result = retry_with_backoff(
+            lambda: api.call(query),
+            max_retries=3
+        )
+        return {"success": True, "data": result}
+    except Exception as e:
+        return {"error": str(e)}
+```
+
+## Testing Utilities
+
+### Tool Testing
+
+```python
+import pytest
+from fastmcp import FastMCP
+from aden_tools.credentials import CredentialStoreAdapter
+
+@pytest.fixture
+def mcp():
+    """Create MCP server with test credentials."""
+    server = FastMCP("test")
+    creds = CredentialStoreAdapter.for_testing({
+        "api_key": "test-key"
+    })
+    register_tools(server, credentials=creds)
+    return server
+
+@pytest.fixture
+def tool_fn(mcp):
+    """Get tool function for testing."""
+    return mcp._tool_manager._tools["my_tool"].fn
+
+def test_tool_success(tool_fn):
+    """Test successful tool execution."""
+    result = tool_fn(query="test", limit=5)
+    
+    assert result["success"] is True
+    assert "data" in result
+    assert isinstance(result["data"], list)
+
+def test_tool_validation(tool_fn):
+    """Test input validation."""
+    result = tool_fn(query="", limit=5)
+    
+    assert "error" in result
+    assert "required" in result["error"].lower()
+
+def test_tool_error_handling(tool_fn, monkeypatch):
+    """Test error handling."""
+    # Mock API to raise error
+    def mock_api_call(*args, **kwargs):
+        raise Exception("API error")
+    
+    monkeypatch.setattr("my_module.api_call", mock_api_call)
+    
+    result = tool_fn(query="test")
+    
+    assert "error" in result
+    assert "API error" in result["error"]
+```
+
+### Integration Testing
+
+```python
+import httpx
+import pytest
+
+@pytest.fixture
+def mcp_server():
+    """Start MCP server for integration tests."""
+    # Start server in background
+    # Return server URL
+    # Teardown after tests
+    pass
+
+def test_health_check(mcp_server):
+    """Test server health endpoint."""
+    response = httpx.get(f"{mcp_server}/health")
+    assert response.status_code == 200
+    assert response.text == "OK"
+
+def test_tool_via_mcp(mcp_server):
+    """Test tool via MCP protocol."""
+    import mcp
+    
+    client = mcp.ClientSession(server_url=mcp_server)
+    
+    # List tools
+    tools = await client.list_tools()
+    assert "my_tool" in [t.name for t in tools]
+    
+    # Call tool
+    result = await client.call_tool(
+        name="my_tool",
+        arguments={"query": "test", "limit": 5}
+    )
+    
+    assert result["success"] is True
+```
+
+## Custom Routes
+
+### Adding HTTP Endpoints
+
+```python
+from fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+
+mcp = FastMCP("server")
+
+@mcp.custom_route("/api/status", methods=["GET"])
+async def status_endpoint(request: Request) -> JSONResponse:
+    """Custom status endpoint."""
+    return JSONResponse({
+        "status": "running",
+        "tools_count": len(mcp._tool_manager._tools),
+        "version": "1.0.0"
+    })
+
+@mcp.custom_route("/api/tools", methods=["GET"])
+async def tools_list_endpoint(request: Request) -> JSONResponse:
+    """List all registered tools."""
+    tools = [
+        {
+            "name": name,
+            "description": tool.fn.__doc__
+        }
+        for name, tool in mcp._tool_manager._tools.items()
+    ]
+    return JSONResponse({"tools": tools})
+```
+
+## Logging
+
+### Structured Logging
+
+```python
+import logging
+import json
+from datetime import datetime
+
+class StructuredLogger:
+    def __init__(self, name: str):
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.INFO)
+    
+    def log(self, level: str, message: str, **kwargs):
+        """Log structured JSON."""
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": level,
+            "message": message,
+            **kwargs
+        }
+        self.logger.info(json.dumps(log_entry))
+
+logger = StructuredLogger("mcp-server")
+
+@mcp.tool()
+def logged_tool(query: str) -> dict:
+    """Tool with structured logging."""
+    logger.log(
+        "INFO",
+        "Tool called",
+        tool_name="logged_tool",
+        query=query
+    )
+    
+    try:
+        result = process_query(query)
+        logger.log(
+            "INFO",
+            "Tool succeeded",
+            tool_name="logged_tool",
+            result_count=len(result)
+        )
+        return {"success": True, "data": result}
+    except Exception as e:
+        logger.log(
+            "ERROR",
+            "Tool failed",
+            tool_name="logged_tool",
+            error=str(e)
+        )
+        return {"error": str(e)}
+```
+
+## Performance Optimization
+
+### Connection Pooling
+
+```python
+import httpx
+from contextlib import asynccontextmanager
+
+# Global HTTP client with connection pooling
+HTTP_CLIENT = None
+
+@asynccontextmanager
+async def lifespan(app):
+    """Manage HTTP client lifecycle."""
+    global HTTP_CLIENT
+    
+    limits = httpx.Limits(
+        max_keepalive_connections=20,
+        max_connections=100
+    )
+    
+    HTTP_CLIENT = httpx.AsyncClient(limits=limits)
+    yield
+    await HTTP_CLIENT.aclose()
+
+mcp = FastMCP("server", lifespan=lifespan)
+
+@mcp.tool()
+async def async_tool(url: str) -> dict:
+    """Async tool using connection pool."""
+    response = await HTTP_CLIENT.get(url, timeout=30.0)
+    return {"status": response.status_code, "data": response.json()}
+```
+
+### Caching
+
+```python
+from functools import lru_cache
+import time
+
+def time_bucket(seconds: int) -> int:
+    """Get current time bucket for cache TTL."""
+    return int(time.time() / seconds)
+
+@lru_cache(maxsize=100)
+def cached_operation(query: str, time_bucket: int) -> dict:
+    """Cached operation with TTL."""
+    # Expensive operation
+    result = expensive_api_call(query)
+    return result
+
+@mcp.tool()
+def cached_tool(query: str) -> dict:
+    """Tool with 5-minute cache."""
+    bucket = time_bucket(300)  # 5 minutes
+    result = cached_operation(query, bucket)
+    return {"success": True, "data": result, "cached": True}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Tool Naming">
+    - Use snake_case: `my_tool`, not `myTool`
+    - Be descriptive: `search_github_repos`, not `search`
+    - Group related tools: `github_*`, `slack_*`
+    - Avoid abbreviations unless very common
+  </Accordion>
+
+  <Accordion title="Documentation">
+    - Write clear docstrings for every tool
+    - Document all parameters with types and constraints
+    - Include examples in docstrings
+    - Provide error handling guidance
+    - Maintain README.md for each tool
+  </Accordion>
+
+  <Accordion title="Error Messages">
+    - Be specific: "Query must be 1-500 characters", not "Invalid query"
+    - Include help text: `{"error": "...", "help": "Get API key at..."}`
+    - Add error codes for programmatic handling
+    - Suggest remediation steps
+  </Accordion>
+
+  <Accordion title="Testing">
+    - Test all parameters and edge cases
+    - Mock external APIs
+    - Test error handling paths
+    - Test with real credentials (in separate suite)
+    - Use CI/CD for automated testing
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Creating Tools" icon="wrench" href="/tools/creating-tools">
+    Build custom tools for your use case
+  </Card>
+  <Card title="MCP Server Setup" icon="server" href="/tools/mcp-server-guide">
+    Deploy your MCP server
+  </Card>
+</CardGroup>

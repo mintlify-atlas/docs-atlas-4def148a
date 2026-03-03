@@ -1,0 +1,587 @@
+---
+title: 'MCP Integration'
+description: 'Connect external MCP servers to provide tools for your agents'
+icon: 'plug'
+---
+
+## Overview
+
+The Model Context Protocol (MCP) enables agents to access tools from external MCP servers. The framework provides built-in support for registering MCP servers via STDIO or HTTP transport, auto-discovering tools, and using them seamlessly in your agents.
+
+## Quick Start
+
+### Register MCP Server Programmatically
+
+```python
+from framework.runner.runner import AgentRunner
+
+# Load your agent
+runner = AgentRunner.load("exports/my-agent")
+
+# Register MCP server via STDIO
+runner.register_mcp_server(
+    name="tools",
+    transport="stdio",
+    command="python",
+    args=["-m", "aden_tools.mcp_server", "--stdio"],
+    cwd="/path/to/tools"
+)
+
+# Tools are now available to your agent
+result = await runner.run({"input": "search for quantum computing papers"})
+```
+
+### Using Configuration File
+
+Create `mcp_servers.json` in your agent folder:
+
+```json
+{
+  "servers": [
+    {
+      "name": "tools",
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "aden_tools.mcp_server", "--stdio"],
+      "cwd": "../tools"
+    }
+  ]
+}
+```
+
+The framework automatically loads these servers when you load the agent:
+
+```python
+runner = AgentRunner.load("exports/my-agent")  # MCP servers auto-loaded
+```
+
+## Transport Types
+
+### STDIO Transport
+
+Best for local MCP servers running as subprocesses.
+
+```python
+runner.register_mcp_server(
+    name="local-tools",
+    transport="stdio",
+    command="python",
+    args=["-m", "my_tools.server", "--stdio"],
+    cwd="/path/to/my-tools",
+    env={
+        "API_KEY": "your-key-here"
+    }
+)
+```
+
+**Configuration parameters:**
+
+<ParamField path="command" type="string" required>
+  Executable to run (e.g., `python`, `node`, `npx`)
+</ParamField>
+
+<ParamField path="args" type="array" required>
+  Command-line arguments
+</ParamField>
+
+<ParamField path="cwd" type="string">
+  Working directory for the process
+</ParamField>
+
+<ParamField path="env" type="object">
+  Environment variables to pass to the process
+</ParamField>
+
+**Example:**
+
+```json
+{
+  "name": "filesystem",
+  "transport": "stdio",
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
+```
+
+### HTTP Transport
+
+Best for remote MCP servers or containerized deployments.
+
+```python
+runner.register_mcp_server(
+    name="remote-tools",
+    transport="http",
+    url="http://localhost:4001",
+    headers={
+        "Authorization": "Bearer token"
+    }
+)
+```
+
+**Configuration parameters:**
+
+<ParamField path="url" type="string" required>
+  Base URL of the MCP server
+</ParamField>
+
+<ParamField path="headers" type="object">
+  HTTP headers to include with requests
+</ParamField>
+
+**Example:**
+
+```json
+{
+  "name": "analytics-tools",
+  "transport": "http",
+  "url": "https://analytics-server.example.com",
+  "headers": {
+    "Authorization": "Bearer {{api_token}}",
+    "X-Client-Version": "1.0.0"
+  }
+}
+```
+
+## Using MCP Tools in Agents
+
+Once registered, MCP tools are available just like any other tool.
+
+### In WorkflowBuilder
+
+```python
+from framework.builder.workflow import WorkflowBuilder
+
+builder = WorkflowBuilder()
+
+# Add node that uses MCP tools
+builder.add_node(
+    node_id="researcher",
+    name="Web Researcher",
+    node_type="event_loop",
+    system_prompt="Research the topic using web_search and web_scrape",
+    tools=["web_search", "web_scrape"],  # Tools from MCP server
+    input_keys=["topic"],
+    output_keys=["findings"]
+)
+```
+
+### In agent.json
+
+```json
+{
+  "nodes": [
+    {
+      "id": "searcher",
+      "name": "Web Searcher",
+      "node_type": "event_loop",
+      "system_prompt": "Search for information about {topic}",
+      "tools": ["web_search", "web_scrape"],
+      "input_keys": ["topic"],
+      "output_keys": ["results"]
+    }
+  ]
+}
+```
+
+### In Agent Builder MCP
+
+When building agents with the Agent Builder MCP server:
+
+```json
+{
+  "node_id": "search_sources",
+  "name": "Search Sources",
+  "node_type": "event_loop",
+  "tools": "[\"web_search\", \"web_scrape\"]",
+  "system_prompt": "Search for sources using the provided queries..."
+}
+```
+
+## Available Tools
+
+When you register the `aden_tools` MCP server, these tools become available:
+
+### Web Tools
+
+<AccordionGroup>
+  <Accordion title="web_search">
+    Search the web using Brave Search API.
+
+    **Parameters:**
+    - `query` (string, required): Search query
+    - `count` (integer): Number of results (default: 10)
+
+    **Credentials Required:** `BRAVE_SEARCH_API_KEY`
+
+    **Example:**
+    ```json
+    {
+      "query": "quantum computing breakthroughs 2024",
+      "count": 5
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="web_scrape">
+    Scrape content from a URL.
+
+    **Parameters:**
+    - `url` (string, required): URL to scrape
+    - `selector` (string): CSS selector for content extraction
+
+    **Example:**
+    ```json
+    {
+      "url": "https://example.com/article",
+      "selector": "article.content"
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### File Tools
+
+<AccordionGroup>
+  <Accordion title="file_read">
+    Read file contents.
+
+    **Parameters:**
+    - `path` (string, required): File path
+
+    **Example:**
+    ```json
+    {
+      "path": "/path/to/file.txt"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="file_write">
+    Write content to a file.
+
+    **Parameters:**
+    - `path` (string, required): File path
+    - `content` (string, required): Content to write
+
+    **Example:**
+    ```json
+    {
+      "path": "/path/to/output.txt",
+      "content": "Hello, world!"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="pdf_read">
+    Extract text from PDF files.
+
+    **Parameters:**
+    - `path` (string, required): PDF file path
+
+    **Example:**
+    ```json
+    {
+      "path": "/path/to/document.pdf"
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Environment Variables
+
+Some MCP tools require credentials via environment variables.
+
+### Pass via Configuration
+
+```json
+{
+  "servers": [
+    {
+      "name": "tools",
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "aden_tools.mcp_server", "--stdio"],
+      "env": {
+        "BRAVE_SEARCH_API_KEY": "${BRAVE_SEARCH_API_KEY}"
+      }
+    }
+  ]
+}
+```
+
+The framework substitutes `${VAR_NAME}` with values from the environment.
+
+### Pass Programmatically
+
+```python
+import os
+
+runner.register_mcp_server(
+    name="tools",
+    transport="stdio",
+    command="python",
+    args=["-m", "aden_tools.mcp_server", "--stdio"],
+    env={
+        "BRAVE_SEARCH_API_KEY": os.environ["BRAVE_SEARCH_API_KEY"]
+    }
+)
+```
+
+## Multiple MCP Servers
+
+You can register multiple MCP servers to access different sets of tools:
+
+```json
+{
+  "servers": [
+    {
+      "name": "tools",
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "aden_tools.mcp_server", "--stdio"]
+    },
+    {
+      "name": "database-tools",
+      "transport": "http",
+      "url": "http://localhost:5001"
+    },
+    {
+      "name": "analytics-tools",
+      "transport": "http",
+      "url": "http://analytics-server:6001"
+    }
+  ]
+}
+```
+
+All tools from all servers will be available to your agent.
+
+## Best Practices
+
+### Development
+
+<Steps>
+  <Step title="Use STDIO for Local Development">
+    STDIO transport is easier to debug and doesn't require managing server processes:
+
+    ```python
+    runner.register_mcp_server(
+        name="dev-tools",
+        transport="stdio",
+        command="python",
+        args=["-m", "my_tools.server", "--stdio"]
+    )
+    ```
+  </Step>
+
+  <Step title="Test Tools Standalone">
+    Verify MCP server works before integrating:
+
+    ```bash
+    # Test STDIO server
+    echo '{"method": "tools/list"}' | python -m aden_tools.mcp_server --stdio
+    ```
+  </Step>
+
+  <Step title="Check Logs">
+    Enable debug logging to see MCP communication:
+
+    ```python
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    ```
+  </Step>
+</Steps>
+
+### Production
+
+<Steps>
+  <Step title="Use HTTP for Production">
+    HTTP transport is better for:
+    - Containerized deployments
+    - Shared tools across multiple agents
+    - Remote tool execution
+
+    ```python
+    runner.register_mcp_server(
+        name="prod-tools",
+        transport="http",
+        url="http://tools-service:8000"
+    )
+    ```
+  </Step>
+
+  <Step title="Implement Health Checks">
+    Monitor MCP server health:
+
+    ```bash
+    curl http://tools-service:8000/health
+    ```
+  </Step>
+
+  <Step title="Handle Cleanup">
+    Always clean up MCP connections:
+
+    ```python
+    try:
+        runner = AgentRunner.load("exports/my-agent")
+        runner.register_mcp_server(...)
+        result = await runner.run(input_data)
+    finally:
+        runner.cleanup()  # Disconnects all MCP servers
+    ```
+
+    Or use context manager:
+
+    ```python
+    async with AgentRunner.load("exports/my-agent") as runner:
+        runner.register_mcp_server(...)
+        result = await runner.run(input_data)
+        # Automatic cleanup
+    ```
+  </Step>
+</Steps>
+
+### Tool Name Conflicts
+
+If multiple MCP servers provide tools with the same name, the last registered server wins.
+
+**To avoid conflicts:**
+- Use unique tool names in your MCP servers
+- Register servers in priority order (most important last)
+- Use separate agents for different tool sets
+
+## Complete Example
+
+Here's a complete example of an agent that uses MCP tools:
+
+```python
+import asyncio
+from pathlib import Path
+from framework.runner.runner import AgentRunner
+
+async def main():
+    # Create agent path
+    agent_path = Path("exports/web-research-agent")
+
+    # Load agent
+    runner = AgentRunner.load(agent_path)
+
+    # Register MCP server
+    runner.register_mcp_server(
+        name="tools",
+        transport="stdio",
+        command="python",
+        args=["-m", "aden_tools.mcp_server", "--stdio"],
+        cwd="../tools",
+        env={
+            "BRAVE_SEARCH_API_KEY": "your-api-key"
+        }
+    )
+
+    # Run agent
+    result = await runner.run({
+        "query": "latest developments in quantum computing"
+    })
+
+    print(f"Research complete: {result}")
+
+    # Cleanup
+    runner.cleanup()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection Errors (STDIO)">
+    **Symptoms:**
+    - Server fails to start
+    - No response from server
+    - Process exits immediately
+
+    **Solutions:**
+    1. Check command and path are correct
+    2. Verify server starts successfully standalone:
+       ```bash
+       python -m aden_tools.mcp_server --stdio
+       ```
+    3. Check environment variables are set
+    4. Look at stderr output for error messages
+  </Accordion>
+
+  <Accordion title="Tool Not Found">
+    **Symptoms:**
+    - Tool referenced in agent.json but not available
+    - "Tool 'xxx' not found" error
+
+    **Solutions:**
+    1. Verify server registered successfully (check logs)
+    2. List available tools:
+       ```python
+       tools = runner._tool_registry.get_registered_names()
+       print(f"Available tools: {tools}")
+       ```
+    3. Check tool name spelling in configuration
+  </Accordion>
+
+  <Accordion title="HTTP Server Not Responding">
+    **Symptoms:**
+    - Connection timeout
+    - 404 or 500 errors
+
+    **Solutions:**
+    1. Verify server is running:
+       ```bash
+       curl http://localhost:4001/health
+       ```
+    2. Check firewall settings
+    3. Verify URL and port are correct
+    4. Check server logs for errors
+  </Accordion>
+
+  <Accordion title="Missing Credentials">
+    **Symptoms:**
+    - Tool execution fails with auth error
+    - "API key not found" errors
+
+    **Solutions:**
+    1. Verify environment variables are set:
+       ```bash
+       echo $BRAVE_SEARCH_API_KEY
+       ```
+    2. Check env vars are passed to MCP server:
+       ```json
+       {
+         "env": {
+           "BRAVE_SEARCH_API_KEY": "${BRAVE_SEARCH_API_KEY}"
+         }
+       }
+       ```
+    3. Use credential store for managed credentials
+  </Accordion>
+</AccordionGroup>
+
+## Building Your Own MCP Server
+
+For building custom MCP servers, see:
+
+<Card title="MCP Server Guide" icon="code" href="/tools/mcp-server-guide">
+  Learn how to build your own MCP servers with custom tools
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Credential Management" icon="key" href="/guides/credential-management">
+    Manage API credentials for MCP tools
+  </Card>
+  <Card title="Browser Automation" icon="globe" href="/guides/browser-automation">
+    Use GCU browser tools via MCP
+  </Card>
+</CardGroup>

@@ -1,0 +1,579 @@
+---
+title: Security Scanning Tools
+description: Scan ports, analyze SSL/TLS, check DNS security, and detect vulnerabilities
+---
+
+# Security Scanning Tools
+
+Security scanning tools enable agents to assess network security, analyze SSL/TLS configurations, check DNS records, and detect potential vulnerabilities.
+
+<Warning>
+These tools should only be used on systems you own or have explicit permission to test. Unauthorized scanning may be illegal.
+</Warning>
+
+## Port Scanner
+
+### port_scan
+
+Scan TCP ports and detect exposed services.
+
+<ParamField path="host" type="string" required>
+  Hostname or IP address to scan
+</ParamField>
+
+<ParamField path="ports" type="string" default="top20">
+  Ports to scan: "top20", "top100", or comma-separated list
+</ParamField>
+
+<ParamField path="timeout" type="integer" default="3">
+  Connection timeout in seconds (1-10)
+</ParamField>
+
+<ParamField path="grab_banner" type="boolean" default="true">
+  Attempt to grab service banners
+</ParamField>
+
+<CodeGroup>
+
+```python Quick Scan
+result = port_scan(
+    host="example.com",
+    ports="top20"
+)
+
+if result["success"]:
+    print(f"Host: {result['host']}")
+    print(f"Open ports: {result['open_count']}")
+    
+    for port in result["open_ports"]:
+        print(f"Port {port['port']}: {port['service']}")
+        if port.get('banner'):
+            print(f"  Banner: {port['banner']}")
+```
+
+```python Custom Ports
+result = port_scan(
+    host="192.168.1.1",
+    ports="22,80,443,8080,3306",
+    timeout=5,
+    grab_banner=True
+)
+```
+
+```json Response
+{
+  "success": true,
+  "host": "example.com",
+  "open_ports": [
+    {
+      "port": 80,
+      "service": "HTTP",
+      "state": "open",
+      "banner": "nginx/1.18.0",
+      "risk": "low"
+    },
+    {
+      "port": 443,
+      "service": "HTTPS",
+      "state": "open",
+      "banner": "nginx/1.18.0",
+      "risk": "low"
+    }
+  ],
+  "open_count": 2,
+  "closed_count": 18,
+  "risky_ports": [],
+  "scan_duration": 2.3
+}
+```
+
+</CodeGroup>
+
+### Risk Categories
+
+Ports are categorized by risk level:
+
+<Tabs>
+  <Tab title="High Risk">
+    **Database Ports** (should not be exposed):
+    - 3306 - MySQL
+    - 5432 - PostgreSQL  
+    - 1433 - MSSQL
+    - 6379 - Redis
+    - 27017/27018 - MongoDB
+    - 9200/9300 - Elasticsearch
+    
+    **Admin Interfaces**:
+    - 3389 - RDP
+    - 5900 - VNC
+    - 10000 - Webmin
+  </Tab>
+  
+  <Tab title="Medium Risk">
+    **Legacy Protocols**:
+    - 21 - FTP (unencrypted)
+    - 23 - Telnet (unencrypted)
+    - 110 - POP3 (unencrypted)
+    - 143 - IMAP (unencrypted)
+    - 445 - SMB
+  </Tab>
+  
+  <Tab title="Low Risk">
+    **Standard Services**:
+    - 22 - SSH
+    - 80 - HTTP
+    - 443 - HTTPS
+    - 993 - IMAPS
+    - 995 - POP3S
+  </Tab>
+</Tabs>
+
+### Common Port Mappings
+
+```python
+PORT_SERVICE_MAP = {
+    21: "FTP",
+    22: "SSH",
+    23: "Telnet",
+    25: "SMTP",
+    80: "HTTP",
+    443: "HTTPS",
+    3306: "MySQL",
+    3389: "RDP",
+    5432: "PostgreSQL",
+    6379: "Redis",
+    8080: "HTTP-Alt",
+    27017: "MongoDB"
+}
+```
+
+## SSL/TLS Scanner
+
+### ssl_tls_scan
+
+Analyze SSL/TLS configuration and certificate.
+
+<ParamField path="host" type="string" required>
+  Hostname to scan
+</ParamField>
+
+<ParamField path="port" type="integer" default="443">
+  Port to scan (default: 443)
+</ParamField>
+
+```python Example
+result = ssl_tls_scan(
+    host="example.com",
+    port=443
+)
+
+if result["success"]:
+    cert = result["certificate"]
+    print(f"Subject: {cert['subject']}")
+    print(f"Issuer: {cert['issuer']}")
+    print(f"Valid from: {cert['not_before']}")
+    print(f"Valid until: {cert['not_after']}")
+    print(f"Days remaining: {cert['days_remaining']}")
+    
+    config = result["tls_config"]
+    print(f"\nTLS Version: {config['version']}")
+    print(f"Cipher Suite: {config['cipher']}")
+    print(f"Key Size: {config['key_size']} bits")
+    
+    if result["vulnerabilities"]:
+        print("\nVulnerabilities:")
+        for vuln in result["vulnerabilities"]:
+            print(f"  - {vuln['name']}: {vuln['severity']}")
+```
+
+### Checks Performed
+
+- Certificate validity and expiration
+- Certificate chain verification
+- Hostname verification
+- TLS protocol version support
+- Cipher suite strength
+- Common vulnerabilities:
+  - Expired certificates
+  - Self-signed certificates
+  - Weak ciphers (RC4, 3DES)
+  - SSLv3/TLS 1.0 support
+  - Missing intermediate certificates
+
+## DNS Security Scanner
+
+### dns_security_scan
+
+Check DNS security records (SPF, DMARC, DKIM, DNSSEC).
+
+<ParamField path="domain" type="string" required>
+  Domain to scan
+</ParamField>
+
+```python Example
+result = dns_security_scan(domain="example.com")
+
+if result["success"]:
+    print(f"Domain: {result['domain']}")
+    
+    # SPF Record
+    spf = result["spf"]
+    print(f"\nSPF: {spf['status']}")
+    if spf['record']:
+        print(f"Record: {spf['record']}")
+        print(f"Valid: {spf['valid']}")
+    
+    # DMARC Record
+    dmarc = result["dmarc"]
+    print(f"\nDMARC: {dmarc['status']}")
+    if dmarc['record']:
+        print(f"Policy: {dmarc['policy']}")
+        print(f"Aggregate Reports: {dmarc['rua']}")
+    
+    # DKIM
+    dkim = result["dkim"]
+    print(f"\nDKIM: {dkim['status']}")
+    
+    # DNSSEC
+    dnssec = result["dnssec"]
+    print(f"\nDNSSEC: {dnssec['enabled']}")
+    
+    # Security Score
+    print(f"\nSecurity Score: {result['security_score']}/100")
+    
+    if result["recommendations"]:
+        print("\nRecommendations:")
+        for rec in result["recommendations"]:
+            print(f"  - {rec}")
+```
+
+### DNS Records Checked
+
+<AccordionGroup>
+  <Accordion title="SPF (Sender Policy Framework)">
+    Prevents email spoofing by specifying authorized mail servers.
+    
+    Example SPF record:
+    ```
+    v=spf1 ip4:192.0.2.0/24 include:_spf.google.com ~all
+    ```
+    
+    Checks:
+    - Record exists
+    - Syntax is valid
+    - No more than 10 DNS lookups
+    - Ends with `-all` or `~all`
+  </Accordion>
+  
+  <Accordion title="DMARC (Domain-based Message Authentication)">
+    Provides policy for handling SPF/DKIM failures.
+    
+    Example DMARC record:
+    ```
+    v=DMARC1; p=reject; rua=mailto:dmarc@example.com
+    ```
+    
+    Checks:
+    - Record exists
+    - Policy is set (none, quarantine, reject)
+    - Aggregate reporting configured
+  </Accordion>
+  
+  <Accordion title="DKIM (DomainKeys Identified Mail)">
+    Cryptographically signs emails to verify authenticity.
+    
+    Checks:
+    - Common selectors exist (default, google, mail)
+    - Public key is published
+  </Accordion>
+  
+  <Accordion title="DNSSEC">
+    Cryptographically signs DNS records to prevent tampering.
+    
+    Checks:
+    - DNSSEC is enabled
+    - DS records exist in parent zone
+    - Chain of trust is valid
+  </Accordion>
+</AccordionGroup>
+
+## HTTP Headers Scanner
+
+### http_headers_scan
+
+Check security-related HTTP response headers.
+
+<ParamField path="url" type="string" required>
+  URL to scan
+</ParamField>
+
+<ParamField path="follow_redirects" type="boolean" default="true">
+  Follow HTTP redirects
+</ParamField>
+
+```python Example
+result = http_headers_scan(
+    url="https://example.com",
+    follow_redirects=True
+)
+
+if result["success"]:
+    print(f"URL: {result['url']}")
+    print(f"Status: {result['status_code']}")
+    
+    headers = result["security_headers"]
+    print("\nSecurity Headers:")
+    for name, info in headers.items():
+        status = "✓" if info['present'] else "✗"
+        print(f"{status} {name}: {info['value'] or 'Not set'}")
+    
+    print(f"\nSecurity Score: {result['security_score']}/100")
+    
+    if result["missing_headers"]:
+        print("\nMissing Headers:")
+        for header in result["missing_headers"]:
+            print(f"  - {header['name']}: {header['recommendation']}")
+```
+
+### Security Headers
+
+| Header | Purpose | Recommendation |
+|--------|---------|----------------|
+| `Strict-Transport-Security` | Force HTTPS | `max-age=31536000; includeSubDomains` |
+| `Content-Security-Policy` | Prevent XSS | `default-src 'self'` |
+| `X-Frame-Options` | Prevent clickjacking | `DENY` or `SAMEORIGIN` |
+| `X-Content-Type-Options` | Prevent MIME sniffing | `nosniff` |
+| `Referrer-Policy` | Control referrer info | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | Control browser features | `geolocation=(), camera=()` |
+
+## Subdomain Enumeration
+
+### subdomain_enumerate
+
+Enumerate subdomains via DNS.
+
+<ParamField path="domain" type="string" required>
+  Domain to enumerate
+</ParamField>
+
+<ParamField path="method" type="string" default="dns">
+  Enumeration method: "dns", "brute", or "all"
+</ParamField>
+
+<ParamField path="wordlist" type="string">
+  Path to wordlist for brute force
+</ParamField>
+
+```python Example
+result = subdomain_enumerate(
+    domain="example.com",
+    method="dns"
+)
+
+if result["success"]:
+    print(f"Domain: {result['domain']}")
+    print(f"Subdomains found: {result['count']}")
+    
+    for subdomain in result["subdomains"]:
+        print(f"{subdomain['name']}: {subdomain['ip']}")
+```
+
+## Technology Stack Detection
+
+### tech_stack_detect
+
+Detect technologies used by a website.
+
+<ParamField path="url" type="string" required>
+  URL to analyze
+</ParamField>
+
+```python Example
+result = tech_stack_detect(url="https://example.com")
+
+if result["success"]:
+    print(f"URL: {result['url']}")
+    
+    if result["web_server"]:
+        print(f"\nWeb Server: {result['web_server']}")
+    
+    if result["frameworks"]:
+        print("\nFrameworks:")
+        for fw in result["frameworks"]:
+            print(f"  - {fw['name']} {fw['version']}")
+    
+    if result["cms"]:
+        print(f"\nCMS: {result['cms']}")
+    
+    if result["analytics"]:
+        print("\nAnalytics:")
+        for tool in result["analytics"]:
+            print(f"  - {tool}")
+```
+
+### Detection Methods
+
+- HTTP response headers
+- HTML meta tags
+- JavaScript libraries
+- CSS frameworks
+- Cookie names
+- URL patterns
+- Favicon hashes
+
+## Risk Scoring
+
+### risk_score
+
+Compute overall security risk grade.
+
+<ParamField path="host" type="string" required>
+  Hostname or domain to assess
+</ParamField>
+
+<ParamField path="include_port_scan" type="boolean" default="true">
+  Include port scan in assessment
+</ParamField>
+
+<ParamField path="include_ssl_check" type="boolean" default="true">
+  Include SSL/TLS check
+</ParamField>
+
+<ParamField path="include_dns_check" type="boolean" default="true">
+  Include DNS security check
+</ParamField>
+
+<ParamField path="include_headers_check" type="boolean" default="true">
+  Include HTTP headers check
+</ParamField>
+
+```python Example
+result = risk_score(
+    host="example.com",
+    include_port_scan=True,
+    include_ssl_check=True,
+    include_dns_check=True,
+    include_headers_check=True
+)
+
+if result["success"]:
+    print(f"Host: {result['host']}")
+    print(f"Overall Grade: {result['grade']}")
+    print(f"Risk Score: {result['score']}/100")
+    
+    print("\nCategory Scores:")
+    for category, score in result["category_scores"].items():
+        print(f"  {category}: {score}/100")
+    
+    if result["critical_issues"]:
+        print("\nCritical Issues:")
+        for issue in result["critical_issues"]:
+            print(f"  - {issue['description']}")
+            print(f"    Remediation: {issue['remediation']}")
+    
+    if result["recommendations"]:
+        print("\nRecommendations:")
+        for rec in result["recommendations"]:
+            print(f"  - {rec}")
+```
+
+### Risk Grades
+
+| Grade | Score Range | Description |
+|-------|-------------|-------------|
+| A+ | 95-100 | Excellent security posture |
+| A | 85-94 | Strong security |
+| B | 70-84 | Good security with minor issues |
+| C | 50-69 | Moderate security concerns |
+| D | 30-49 | Significant security issues |
+| F | 0-29 | Critical security problems |
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Legal Compliance">
+    - Only scan systems you own or have permission to test
+    - Check local laws regarding security testing
+    - Respect robots.txt and security.txt
+    - Use appropriate scan timing to avoid disruption
+  </Accordion>
+
+  <Accordion title="Rate Limiting">
+    Avoid overwhelming target systems:
+    ```python
+    import time
+    
+    # Scan multiple hosts with delays
+    hosts = ["host1.com", "host2.com", "host3.com"]
+    for host in hosts:
+        result = port_scan(host=host, ports="top20")
+        time.sleep(5)  # 5 second delay between scans
+    ```
+  </Accordion>
+
+  <Accordion title="Interpreting Results">
+    Not all findings are vulnerabilities:
+    - Open port 80/443 is normal for web servers
+    - Self-signed certs are acceptable for internal use
+    - Missing SPF is only an issue for mail domains
+    
+    Prioritize by:
+    1. Critical: Exposed databases, weak SSL
+    2. High: Missing security headers, legacy protocols
+    3. Medium: Missing DNS records, outdated software
+    4. Low: Informational findings
+  </Accordion>
+
+  <Accordion title="Remediation Priority">
+    Fix vulnerabilities in this order:
+    1. **Exposed sensitive services** - Close database ports
+    2. **SSL/TLS issues** - Update certs, disable weak ciphers
+    3. **Email security** - Configure SPF, DMARC, DKIM
+    4. **HTTP headers** - Add security headers
+    5. **Legacy protocols** - Disable FTP, Telnet
+  </Accordion>
+</AccordionGroup>
+
+## Example: Complete Security Audit
+
+```python Security Audit Script
+def security_audit(host: str) -> dict:
+    """Perform comprehensive security audit."""
+    
+    print(f"Starting security audit for {host}...\n")
+    
+    # Overall risk score
+    risk = risk_score(
+        host=host,
+        include_port_scan=True,
+        include_ssl_check=True,
+        include_dns_check=True,
+        include_headers_check=True
+    )
+    
+    print(f"Overall Grade: {risk['grade']}")
+    print(f"Risk Score: {risk['score']}/100\n")
+    
+    # Critical issues
+    if risk["critical_issues"]:
+        print("CRITICAL ISSUES:")
+        for issue in risk["critical_issues"]:
+            print(f"  - {issue['description']}")
+            print(f"    Fix: {issue['remediation']}\n")
+    
+    return risk
+
+# Run audit
+result = security_audit("example.com")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MCP Server Setup" icon="server" href="/tools/mcp-server-guide">
+    Deploy security scanning tools
+  </Card>
+  <Card title="Creating Tools" icon="wrench" href="/tools/creating-tools">
+    Build custom security tools
+  </Card>
+</CardGroup>

@@ -1,0 +1,442 @@
+---
+title: 'Agent Configuration'
+description: 'Configure agent behavior and export settings'
+---
+
+## Overview
+
+Agent configuration defines how agents behave at runtime, including LLM settings, tool access, conversation modes, and export metadata.
+
+## GraphSpec Configuration
+
+The `GraphSpec` class (covered in [Graph API](/api/graph)) includes runtime configuration:
+
+### LLM Settings
+
+<ParamField path="default_model" type="str" default="'claude-haiku-4-5-20251001'">
+  Default LLM model for all nodes. Can be overridden per-node via `NodeSpec.model`.
+</ParamField>
+
+<ParamField path="max_tokens" type="int" default="8192">
+  Maximum tokens for LLM responses across all nodes.
+</ParamField>
+
+<ParamField path="cleanup_llm_model" type="str | None" default="None">
+  Cleanup LLM for JSON extraction fallback (fast/cheap model preferred). If not set, uses `CEREBRAS_API_KEY` → `cerebras/llama-3.3-70b` or `ANTHROPIC_API_KEY` → `claude-haiku-4-5` as fallback.
+</ParamField>
+
+### Execution Limits
+
+<ParamField path="max_steps" type="int" default="100">
+  Maximum node executions before timeout. Prevents infinite loops.
+</ParamField>
+
+<ParamField path="max_retries_per_node" type="int" default="3">
+  Maximum retries per node on failure (can be overridden per-node).
+</ParamField>
+
+### Conversation Mode
+
+<ParamField path="conversation_mode" type="str" default="'continuous'">
+  How conversations flow between event_loop nodes:
+  - `continuous` (default): One conversation threads through all event_loop nodes with cumulative tools and layered prompt composition
+  - `isolated`: Each node gets a fresh conversation
+</ParamField>
+
+<ParamField path="identity_prompt" type="str | None" default="None">
+  Agent-level identity prompt (Layer 1 of the onion model). In continuous mode, this is the static identity that persists unchanged across all node transitions.
+</ParamField>
+
+### EventLoopNode Configuration
+
+<ParamField path="loop_config" type="dict[str, Any]" default="{}">
+  EventLoopNode configuration:
+  ```python
+  loop_config={
+      "max_iterations": 20,
+      "max_tool_calls_per_turn": 10,
+      "enable_thinking": True,
+      "stream_output": True
+  }
+  ```
+</ParamField>
+
+---
+
+## Node-Level Configuration
+
+Node-specific configuration via `NodeSpec` (covered in [Node API](/api/nodes)):
+
+### LLM Overrides
+
+<ParamField path="model" type="str | None">
+  Override the graph's default model for this node only.
+</ParamField>
+
+<ParamField path="system_prompt" type="str | None">
+  Node-specific system prompt (Layer 2 in continuous mode).
+</ParamField>
+
+### Tool Access
+
+<ParamField path="tools" type="list[str]">
+  Which tools this node can use. Tools must be registered in the agent's tool registry.
+</ParamField>
+
+### Retry Behavior
+
+<ParamField path="max_retries" type="int" default="3">
+  Override max retries for this node.
+</ParamField>
+
+<ParamField path="retry_on" type="list[str]">
+  Error types to retry on: `["rate_limit", "network_error", "timeout"]`
+</ParamField>
+
+<ParamField path="max_node_visits" type="int" default="0">
+  Max times this node executes in one run. 0 = unlimited (for forever-alive agents). Set >1 for one-shot agents with feedback loops.
+</ParamField>
+
+### Validation
+
+<ParamField path="output_model" type="type[BaseModel] | None">
+  Pydantic model class for validating LLM output. When set, responses are validated and parsing errors trigger retries.
+</ParamField>
+
+<ParamField path="max_validation_retries" type="int" default="2">
+  Maximum retries when Pydantic validation fails.
+</ParamField>
+
+---
+
+## Agent Export Format
+
+When exporting an agent, the following structure is created:
+
+```
+my_agent/
+  ├── agent.py          # Agent definition
+  ├── agent.json        # Serialized graph spec
+  ├── config.py         # Agent metadata
+  ├── tools.py          # Tool implementations (optional)
+  ├── requirements.txt  # Python dependencies (optional)
+  └── tests/            # Goal-based tests (optional)
+```
+
+### agent.py
+
+Defines the agent's graph structure:
+
+```python
+from framework.graph import Goal, NodeSpec, EdgeSpec, EdgeCondition
+from framework.graph.edge import GraphSpec
+
+GOAL = Goal(
+    id="my-goal",
+    name="My Agent",
+    description="...",
+    success_criteria=[...],
+    constraints=[...]
+)
+
+NODES = [
+    NodeSpec(
+        id="node1",
+        name="Node 1",
+        description="...",
+        node_type="event_loop",
+        input_keys=[...],
+        output_keys=[...],
+        tools=[...],
+        system_prompt="..."
+    ),
+    # ... more nodes
+]
+
+EDGES = [
+    EdgeSpec(
+        id="edge1",
+        source="node1",
+        target="node2",
+        condition=EdgeCondition.ON_SUCCESS
+    ),
+    # ... more edges
+]
+
+GRAPH = GraphSpec(
+    id="my-agent-graph",
+    goal_id="my-goal",
+    entry_node="node1",
+    terminal_nodes=["node3"],
+    nodes=NODES,
+    edges=EDGES,
+    default_model="claude-haiku-4-5-20251001",
+    max_tokens=8192,
+    conversation_mode="continuous",
+    identity_prompt="You are a helpful agent."
+)
+```
+
+### config.py
+
+Metadata about the agent:
+
+```python
+"""My Agent - Brief description."""
+
+NAME = "my-agent"
+DESCRIPTION = "Detailed description of what this agent does"
+VERSION = "1.0.0"
+AUTHOR = "Your Name"
+TAGS = ["automation", "data-processing"]
+
+# Optional: Required credentials
+REQUIRED_CREDENTIALS = [
+    "api_key",
+    "database_url"
+]
+
+# Optional: Environment variables
+REQUIRED_ENV_VARS = [
+    "WORKSPACE_PATH"
+]
+```
+
+### tools.py
+
+Tool implementations (optional):
+
+```python
+"""Custom tools for my agent."""
+
+from framework.llm import Tool
+
+def my_custom_tool(param1: str, param2: int) -> dict:
+    """Do something useful.
+    
+    Args:
+        param1: Description
+        param2: Description
+    
+    Returns:
+        Result dictionary
+    """
+    # Implementation
+    return {"result": "..."}
+
+# Tool definition
+MY_CUSTOM_TOOL = Tool(
+    name="my_custom_tool",
+    description="Do something useful",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "param1": {"type": "string"},
+            "param2": {"type": "integer"}
+        },
+        "required": ["param1", "param2"]
+    },
+    function=my_custom_tool
+)
+
+# Export all tools
+TOOLS = [MY_CUSTOM_TOOL]
+```
+
+---
+
+## Runtime Configuration
+
+When running an agent, additional configuration can be provided:
+
+### AgentRunner Configuration
+
+```python
+from framework.runner import AgentRunner
+
+# Load agent
+runner = AgentRunner.load(
+    "path/to/my_agent",
+    model="claude-sonnet-4-20250514",  # Override default model
+)
+
+# Run with session state
+result = await runner.run(
+    input_data={...},
+    session_state={
+        "resume_session_id": "session_123",
+        "memory": {...},
+        "paused_at": "node2"
+    }
+)
+```
+
+### GraphExecutor Configuration
+
+```python
+from framework.graph.executor import GraphExecutor
+from framework.graph.output_cleaner import CleansingConfig
+
+executor = GraphExecutor(
+    runtime=runtime,
+    llm=llm_provider,
+    tools=tools,
+    tool_executor=tool_executor,
+    cleansing_config=CleansingConfig(
+        enabled=True,
+        strip_markdown_code_blocks=True,
+        extract_json=True
+    ),
+    enable_parallel_execution=True,
+    loop_config={
+        "max_iterations": 20,
+        "max_tool_calls_per_turn": 10
+    }
+)
+
+result = await executor.execute(
+    graph=graph_spec,
+    goal=goal,
+    input_data={...}
+)
+```
+
+---
+
+## Environment Variables
+
+Common environment variables used by the framework:
+
+### LLM Configuration
+
+<ParamField path="ANTHROPIC_API_KEY" type="str">
+  Anthropic API key for Claude models
+</ParamField>
+
+<ParamField path="OPENAI_API_KEY" type="str">
+  OpenAI API key for GPT models
+</ParamField>
+
+<ParamField path="CEREBRAS_API_KEY" type="str">
+  Cerebras API key for fast inference
+</ParamField>
+
+### Storage
+
+<ParamField path="HIVE_STORAGE_PATH" type="str" default="~/.hive">
+  Base path for agent storage (runs, sessions, credentials)
+</ParamField>
+
+### Logging
+
+<ParamField path="LOG_LEVEL" type="str" default="INFO">
+  Logging level: DEBUG, INFO, WARNING, ERROR
+</ParamField>
+
+<ParamField path="ENABLE_OBSERVABILITY" type="bool" default="false">
+  Enable OpenTelemetry tracing
+</ParamField>
+
+---
+
+## Example: Complete Agent Configuration
+
+```python
+from framework.graph import Goal, SuccessCriterion, Constraint, NodeSpec, EdgeSpec, EdgeCondition
+from framework.graph.edge import GraphSpec
+from pydantic import BaseModel
+
+# Output validation model
+class EmailResult(BaseModel):
+    sent: bool
+    recipient: str
+    message_id: str | None = None
+    error: str | None = None
+
+# Goal
+goal = Goal(
+    id="email-sender-001",
+    name="Email Sender",
+    description="Send personalized emails to leads",
+    success_criteria=[
+        SuccessCriterion(
+            id="delivery",
+            description="Email successfully delivered",
+            metric="output_equals",
+            target=True,
+            weight=1.0
+        )
+    ],
+    constraints=[
+        Constraint(
+            id="rate-limit",
+            description="Max 10 emails per minute",
+            constraint_type="hard",
+            category="safety"
+        )
+    ]
+)
+
+# Nodes
+nodes = [
+    NodeSpec(
+        id="validator",
+        name="Email Validator",
+        description="Validate email address",
+        node_type="event_loop",
+        input_keys=["email"],
+        output_keys=["valid", "normalized_email"],
+        tools=["validate_email"],
+        system_prompt="Validate email addresses using the validate_email tool.",
+        max_retries=2
+    ),
+    NodeSpec(
+        id="sender",
+        name="Email Sender",
+        description="Send the email",
+        node_type="event_loop",
+        input_keys=["normalized_email", "message"],
+        output_keys=["sent", "message_id"],
+        tools=["send_email"],
+        system_prompt="Send emails using the send_email tool.",
+        output_model=EmailResult,
+        max_validation_retries=2,
+        max_retries=3,
+        retry_on=["rate_limit", "network_error"]
+    )
+]
+
+# Edges
+edges = [
+    EdgeSpec(
+        id="validate-to-send",
+        source="validator",
+        target="sender",
+        condition=EdgeCondition.CONDITIONAL,
+        condition_expr="output.valid == true",
+        input_mapping={
+            "normalized_email": "normalized_email"
+        }
+    )
+]
+
+# Graph
+graph = GraphSpec(
+    id="email-sender-graph",
+    goal_id="email-sender-001",
+    entry_node="validator",
+    terminal_nodes=["sender"],
+    nodes=nodes,
+    edges=edges,
+    default_model="claude-haiku-4-5-20251001",
+    max_tokens=4096,
+    max_steps=10,
+    max_retries_per_node=3,
+    conversation_mode="continuous",
+    identity_prompt="You are an email sending agent. Be professional and accurate.",
+    loop_config={
+        "max_iterations": 5,
+        "max_tool_calls_per_turn": 3
+    }
+)
+```

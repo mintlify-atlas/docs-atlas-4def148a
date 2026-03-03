@@ -1,0 +1,742 @@
+---
+title: 'Browser Automation'
+description: 'Control real browsers with Playwright for web scraping and automation'
+icon: 'globe'
+---
+
+## Overview
+
+The Hive framework includes GCU (Goal-driven Chromium Utility), a browser automation system built on Playwright. It enables agents to control real browsers, navigate websites, fill forms, scrape dynamic pages, and interact with web UIs.
+
+## Features
+
+<CardGroup cols={2}>
+  <Card title="Persistent Profiles" icon="user">
+    Save cookies and session data across runs
+  </Card>
+  <Card title="Multi-Tab Support" icon="window-restore">
+    Manage multiple browser tabs simultaneously
+  </Card>
+  <Card title="Stealth Mode" icon="user-secret">
+    Hide automation detection from websites
+  </Card>
+  <Card title="Console Capture" icon="terminal">
+    Capture and analyze JavaScript console logs
+  </Card>
+</CardGroup>
+
+## Setup
+
+### Enable in Quickstart
+
+The quickstart script prompts you to enable browser automation:
+
+```bash
+bash quickstart.sh
+
+# When prompted:
+# "Enable browser automation? [Y/n]"
+# Press Y to enable
+```
+
+This sets `gcu_enabled: true` in `~/.hive/configuration.json`.
+
+### Manual Setup
+
+<Steps>
+  <Step title="Install Playwright">
+    ```bash
+    uv run python -m playwright install chromium
+
+    # With system dependencies (Ubuntu/Debian)
+    uv run python -m playwright install chromium --with-deps
+    ```
+  </Step>
+
+  <Step title="Enable in Configuration">
+    Add to `~/.hive/configuration.json`:
+    ```json
+    {
+      "gcu_enabled": true,
+      "llm": { ... }
+    }
+    ```
+  </Step>
+
+  <Step title="Verify Installation">
+    ```python
+    from gcu.browser.session import BrowserSession
+    import asyncio
+
+    async def test():
+        session = BrowserSession(profile="test")
+        await session.start()
+        print("Browser started successfully")
+        await session.stop()
+
+    asyncio.run(test())
+    ```
+  </Step>
+</Steps>
+
+## Browser Sessions
+
+### Session Types
+
+<Tabs>
+  <Tab title="Standard Session">
+    Single browser with ephemeral or persistent context.
+
+    ```python
+    from gcu.browser.session import BrowserSession
+
+    session = BrowserSession(profile="default")
+    await session.start(persistent=True)  # Save cookies/storage
+    ```
+
+    **Use when:**
+    - Running a single agent
+    - Need full browser control
+    - Want persistent profile storage
+  </Tab>
+
+  <Tab title="Agent Session">
+    Isolated context spawned from a running profile, sharing a single browser process.
+
+    ```python
+    # Create from existing session
+    agent_session = await BrowserSession.create_agent_session(
+        agent_id="agent-123",
+        source_session=main_session
+    )
+    ```
+
+    **Use when:**
+    - Running multiple concurrent agents
+    - Need isolated contexts
+    - Want to share authenticated state
+  </Tab>
+</Tabs>
+
+### Start Browser
+
+```python
+import asyncio
+from gcu.browser.session import BrowserSession
+
+async def main():
+    # Create session
+    session = BrowserSession(profile="default")
+
+    # Start browser (persistent mode)
+    result = await session.start(
+        headless=False,  # Show browser UI
+        persistent=True  # Save cookies/storage
+    )
+
+    print(f"Browser started: {result['status']}")
+    print(f"CDP port: {result['cdp_port']}")
+    print(f"Data dir: {result['user_data_dir']}")
+
+asyncio.run(main())
+```
+
+**Parameters:**
+
+<ParamField path="headless" type="boolean" default={true}>
+  Run browser in headless mode (no UI)
+</ParamField>
+
+<ParamField path="persistent" type="boolean" default={true}>
+  Save cookies and storage to disk. Data stored at:
+  `~/.hive/agents/{agent-name}/browser/{profile}/`
+</ParamField>
+
+### Stop Browser
+
+```python
+await session.stop()
+```
+
+Cleans up:
+- Closes all tabs
+- Closes browser context
+- Releases CDP port
+- Closes browser process (for standard sessions)
+
+## Tab Management
+
+### Open Tab
+
+```python
+# Open URL in new tab
+result = await session.open_tab(
+    url="https://example.com",
+    background=False,  # Focus this tab
+    wait_until="load"  # Wait for page load
+)
+
+print(f"Tab ID: {result['targetId']}")
+print(f"Title: {result['title']}")
+```
+
+**wait_until options:**
+- `commit` - Navigation committed
+- `domcontentloaded` - DOM ready
+- `load` - Page fully loaded (default)
+- `networkidle` - No network activity
+
+### Background Tabs
+
+```python
+# Open tab without stealing focus
+await session.open_tab(
+    url="https://example.com",
+    background=True  # Stay on current tab
+)
+```
+
+### Close Tab
+
+```python
+# Close specific tab
+await session.close_tab(target_id="tab_123")
+
+# Close current tab
+await session.close_tab()
+```
+
+### Focus Tab
+
+```python
+# Switch to tab and bring to front
+await session.focus_tab(target_id="tab_123")
+```
+
+### List Tabs
+
+```python
+tabs = await session.list_tabs()
+for tab in tabs:
+    print(f"{tab['targetId']}: {tab['title']} ({tab['url']})")
+    print(f"  Active: {tab['active']}")
+```
+
+## Navigation
+
+### Navigate to URL
+
+```python
+page = session.get_active_page()
+await page.goto(
+    "https://example.com",
+    wait_until="load",
+    timeout=60000  # 60 seconds
+)
+```
+
+### Reload Page
+
+```python
+await page.reload()
+```
+
+### Go Back/Forward
+
+```python
+await page.go_back()
+await page.go_forward()
+```
+
+### Get Current URL
+
+```python
+url = page.url
+print(f"Current URL: {url}")
+```
+
+## Page Interaction
+
+### Click Elements
+
+```python
+# Click by selector
+await page.click("button.submit")
+
+# Click with options
+await page.click(
+    "a.link",
+    modifiers=["Control"],  # Ctrl+click
+    button="right"  # Right click
+)
+```
+
+### Fill Forms
+
+```python
+# Fill input field
+await page.fill("input[name='email']", "user@example.com")
+
+# Type with delay (simulate human)
+await page.type("input[name='search']", "quantum computing", delay=100)
+
+# Select dropdown
+await page.select_option("select[name='country']", "US")
+
+# Check checkbox
+await page.check("input[type='checkbox']")
+
+# Uncheck
+await page.uncheck("input[type='checkbox']")
+```
+
+### Extract Content
+
+```python
+# Get text content
+text = await page.text_content(".article-body")
+
+# Get inner HTML
+html = await page.inner_html(".content")
+
+# Get attribute
+href = await page.get_attribute("a.link", "href")
+
+# Get all matching elements
+links = await page.query_selector_all("a")
+for link in links:
+    text = await link.text_content()
+    href = await link.get_attribute("href")
+    print(f"{text}: {href}")
+```
+
+### Screenshots
+
+```python
+# Full page screenshot
+await page.screenshot(path="page.png", full_page=True)
+
+# Element screenshot
+element = await page.query_selector(".content")
+await element.screenshot(path="element.png")
+
+# Screenshot as bytes
+screenshot_bytes = await page.screenshot()
+```
+
+### Execute JavaScript
+
+```python
+# Evaluate expression
+title = await page.evaluate("document.title")
+
+# Execute function
+result = await page.evaluate("""
+    () => {
+        return document.querySelectorAll('a').length;
+    }
+""")
+
+# Pass arguments
+result = await page.evaluate("""
+    (selector) => {
+        return document.querySelector(selector).textContent;
+    }
+""", ".heading")
+```
+
+## Console Messages
+
+Capture JavaScript console logs:
+
+```python
+# Get console messages for current tab
+target_id = session.active_page_id
+messages = session.console_messages.get(target_id, [])
+
+for msg in messages:
+    print(f"{msg['type']}: {msg['text']}")
+```
+
+**Message types:**
+- `log` - console.log()
+- `info` - console.info()
+- `warn` - console.warn()
+- `error` - console.error()
+- `debug` - console.debug()
+
+## Persistent Profiles
+
+Persistent profiles save browser state across runs:
+
+```python
+session = BrowserSession(profile="work")
+await session.start(persistent=True)
+
+# Login to website
+page = session.get_active_page()
+await page.goto("https://app.example.com/login")
+await page.fill("input[name='email']", "user@work.com")
+await page.fill("input[name='password']", "secret123")
+await page.click("button[type='submit']")
+
+# Stop (saves cookies/storage)
+await session.stop()
+
+# Restart later - still logged in!
+await session.start(persistent=True)
+await page.goto("https://app.example.com/dashboard")
+# Already authenticated!
+```
+
+**Storage location:**
+```
+~/.hive/agents/{agent-name}/browser/
+├── default/              # Default profile
+│   ├── Cookies           # Cookies database
+│   ├── Local Storage/    # localStorage
+│   └── Session Storage/  # sessionStorage
+└── work/                 # Work profile
+    ├── Cookies
+    └── ...
+```
+
+## Agent Contexts
+
+Create isolated agent sessions from a source profile:
+
+```python
+# Start main profile and login
+main_session = BrowserSession(profile="authenticated")
+await main_session.start(persistent=True)
+# ... perform login ...
+
+# Spawn agent sessions with shared auth state
+agent1 = await BrowserSession.create_agent_session(
+    agent_id="agent-1",
+    source_session=main_session
+)
+
+agent2 = await BrowserSession.create_agent_session(
+    agent_id="agent-2",
+    source_session=main_session
+)
+
+# Each agent has isolated context but shares cookies
+# Changes in agent1 don't affect agent2
+```
+
+**Benefits:**
+- Share single browser process (lower memory)
+- Isolated contexts (separate tabs, storage)
+- Snapshot authenticated state
+- Concurrent execution
+
+## Stealth Mode
+
+GCU includes stealth features to avoid detection:
+
+### Automatic Stealth
+
+- `navigator.webdriver` set to `false`
+- Chrome automation extensions hidden
+- Realistic plugin list
+- Human-like user agent
+- `--disable-blink-features=AutomationControlled`
+
+### Custom User Agent
+
+```python
+# Injected automatically
+BROWSER_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
+```
+
+### Branded Start Page
+
+New tabs show a branded Hive start page instead of about:blank:
+
+```html
+<!DOCTYPE html>
+<html>
+  <body>
+    <div class="logo">🐝</div>
+    <h1>Hive Browser</h1>
+    <p>Ready for automation</p>
+  </body>
+</html>
+```
+
+## Chrome DevTools Protocol
+
+Persistent sessions expose a CDP port for debugging:
+
+```python
+result = await session.start(persistent=True)
+cdp_port = result['cdp_port']
+
+print(f"Connect debugger to: localhost:{cdp_port}")
+```
+
+**Use with Chrome DevTools:**
+1. Open Chrome
+2. Navigate to `chrome://inspect`
+3. Click "Configure"
+4. Add `localhost:{cdp_port}`
+5. Click "inspect" under your session
+
+## Best Practices
+
+### Resource Management
+
+<Steps>
+  <Step title="Always Clean Up">
+    ```python
+    try:
+        session = BrowserSession(profile="default")
+        await session.start()
+        # ... automation ...
+    finally:
+        await session.stop()  # Always cleanup
+    ```
+  </Step>
+
+  <Step title="Use Timeouts">
+    ```python
+    # Prevent hanging on slow pages
+    await page.goto(url, timeout=30000)  # 30 seconds
+    await page.wait_for_selector(".content", timeout=10000)
+    ```
+  </Step>
+
+  <Step title="Reuse Sessions">
+    ```python
+    # Don't recreate browser for each operation
+    session = BrowserSession(profile="default")
+    await session.start(persistent=True)
+
+    # Reuse for multiple operations
+    for url in urls:
+        await session.open_tab(url)
+        # ... process ...
+        await session.close_tab()
+    ```
+  </Step>
+</Steps>
+
+### Error Handling
+
+```python
+from playwright.async_api import TimeoutError, Error
+
+try:
+    await page.goto(url, timeout=30000)
+except TimeoutError:
+    print("Page load timeout")
+except Error as e:
+    print(f"Browser error: {e}")
+```
+
+### Performance
+
+<AccordionGroup>
+  <Accordion title="Block Unnecessary Resources">
+    ```python
+    # Block images, fonts, stylesheets for faster loads
+    await page.route("**/*.{png,jpg,jpeg,gif,svg,woff,woff2,ttf,css}", 
+                     lambda route: route.abort())
+    ```
+  </Accordion>
+
+  <Accordion title="Use Headless Mode">
+    ```python
+    # Headless is faster (no rendering)
+    await session.start(headless=True)
+    ```
+  </Accordion>
+
+  <Accordion title="Wait Strategically">
+    ```python
+    # Don't wait for full load if unnecessary
+    await page.goto(url, wait_until="domcontentloaded")  # Faster
+
+    # Wait only for specific content
+    await page.wait_for_selector(".results")
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Complete Example
+
+Web scraping with persistent login:
+
+```python
+import asyncio
+from gcu.browser.session import BrowserSession
+
+async def scrape_with_auth():
+    # Create persistent session
+    session = BrowserSession(profile="scraper")
+    
+    try:
+        await session.start(
+            headless=False,
+            persistent=True
+        )
+        
+        page = session.get_active_page()
+        
+        # Login (only needed once, then persisted)
+        await page.goto("https://example.com/login")
+        await page.fill("input[name='email']", "user@example.com")
+        await page.fill("input[name='password']", "secret123")
+        await page.click("button[type='submit']")
+        await page.wait_for_selector(".dashboard")
+        
+        # Navigate to protected page
+        await page.goto("https://example.com/data")
+        
+        # Extract data
+        rows = await page.query_selector_all("table.data tr")
+        data = []
+        for row in rows:
+            cells = await row.query_selector_all("td")
+            if cells:
+                values = [await cell.text_content() for cell in cells]
+                data.append(values)
+        
+        print(f"Extracted {len(data)} rows")
+        return data
+        
+    finally:
+        await session.stop()
+
+if __name__ == "__main__":
+    data = asyncio.run(scrape_with_auth())
+    print(data)
+```
+
+## GCU MCP Server
+
+GCU tools are available via MCP server:
+
+```python
+from framework.runner.runner import AgentRunner
+
+runner = AgentRunner.load("exports/my-agent")
+
+# Register GCU MCP server
+runner.register_mcp_server(
+    name="browser",
+    transport="stdio",
+    command="python",
+    args=["-m", "gcu.server", "--stdio"]
+)
+
+# Use browser tools in agent
+result = await runner.run({
+    "instruction": "Navigate to example.com and extract the title"
+})
+```
+
+**Available MCP tools:**
+- `browser_start` - Start browser
+- `browser_stop` - Stop browser
+- `browser_navigate` - Navigate to URL
+- `browser_click` - Click element
+- `browser_fill` - Fill form field
+- `browser_extract` - Extract content
+- `browser_screenshot` - Take screenshot
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Playwright Not Installed">
+    **Error**: `Executable doesn't exist at ...`
+
+    **Solution:**
+    ```bash
+    uv run python -m playwright install chromium
+
+    # With system dependencies
+    uv run python -m playwright install chromium --with-deps
+    ```
+  </Accordion>
+
+  <Accordion title="Browser Crashes">
+    **Error**: Browser process terminated
+
+    **Causes:**
+    - Out of memory
+    - Missing system dependencies
+    - Incompatible Chrome flags
+
+    **Solution:**
+    ```bash
+    # Check system resources
+    free -h
+
+    # Install dependencies (Ubuntu)
+    sudo apt-get install -y libnss3 libatk1.0-0 libatk-bridge2.0-0
+
+    # Use headless mode (lower memory)
+    await session.start(headless=True)
+    ```
+  </Accordion>
+
+  <Accordion title="CDP Port Already in Use">
+    **Error**: `Address already in use: {port}`
+
+    **Solution:**
+    - Ports are allocated automatically from 9222-9322
+    - Previous session didn't clean up properly
+    - Call `await session.stop()` to release port
+    - Restart to clear stuck ports
+  </Accordion>
+
+  <Accordion title="Element Not Found">
+    **Error**: `Timeout 30000ms exceeded waiting for selector`
+
+    **Solutions:**
+    ```python
+    # Wait for dynamic content
+    await page.wait_for_selector(".content", timeout=60000)
+
+    # Check if element exists
+    exists = await page.query_selector(".content") is not None
+
+    # Wait for navigation
+    await page.wait_for_load_state("networkidle")
+    ```
+  </Accordion>
+
+  <Accordion title="Authentication Lost">
+    **Symptoms:** Need to re-login every time
+
+    **Cause:** Not using persistent mode
+
+    **Solution:**
+    ```python
+    # Enable persistent storage
+    await session.start(persistent=True)
+    
+    # Verify user_data_dir is set
+    result = await session.start(persistent=True)
+    print(result['user_data_dir'])
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MCP Integration" icon="plug" href="/guides/mcp-integration">
+    Use browser tools via MCP server
+  </Card>
+  <Card title="Self-Hosting" icon="server" href="/guides/self-hosting">
+    Deploy browser automation in production
+  </Card>
+</CardGroup>

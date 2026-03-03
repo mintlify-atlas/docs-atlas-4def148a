@@ -1,80 +1,330 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get up and running with your first Hive agent in under 5 minutes
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
+Before you begin, ensure you have:
 
-### Step 1: Set up your local environment
+- **Python 3.11+** for agent development
+- **An LLM provider** (Anthropic, OpenAI, Google Gemini, or local models via Ollama)
+- **Git** for cloning the repository
+
+<Note>
+  **Windows Users**: Use WSL (Windows Subsystem for Linux) or Git Bash. Some core automation scripts may not execute correctly in standard Command Prompt or PowerShell.
+</Note>
+
+## Installation
+
+Hive uses a `uv` workspace layout and is **not** installed with `pip install`. Running `pip install -e .` from the repository root will create a placeholder package and Hive will not function correctly.
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/aden-hive/hive.git
+    cd hive
+    ```
+  </Step>
+
+  <Step title="Run the quickstart script">
+    ```bash
+    ./quickstart.sh
+    ```
+    
+    This automated script sets up:
+    - **Framework** - Core agent runtime and graph executor (in `core/.venv`)
+    - **Aden Tools** - 100+ MCP tools for agent capabilities (in `tools/.venv`)
+    - **Credential store** - Encrypted API key storage (`~/.hive/credentials`)
+    - **LLM provider** - Interactive default model configuration
+    - All required Python dependencies with `uv`
+  </Step>
+
+  <Step title="Configure your LLM provider">
+    The quickstart script will prompt you to configure your LLM provider. Enter your API key when prompted:
+
+    ```
+    ? Select your LLM provider:
+      > Anthropic (Claude)
+        OpenAI (GPT-4)
+        Google (Gemini)
+        Local (Ollama)
+    ```
+
+    Your credentials are stored securely in `~/.hive/credentials` with encryption.
+  </Step>
+
+  <Step title="Launch the dashboard">
+    The script will automatically open the Hive dashboard in your browser at `http://localhost:3000`.
+
+    <img src="https://github.com/user-attachments/assets/134d897f-5e75-4874-b00b-e0505f6b45c4" alt="Hive Dashboard" />
+  </Step>
+</Steps>
+
+## Build your first agent
+
+There are three ways to create agents in Hive:
+
+<Tabs>
+  <Tab title="Browser Dashboard">
+    ### Using the Web Interface
+
+    1. **Describe your agent**: Type what you want your agent to do in the input box on the home screen.
+    
+       <img src="https://github.com/user-attachments/assets/1ce19141-a78b-46f5-8d64-dbf987e048f4" alt="Agent Creation" />
+
+    2. **The Queen Bee coding agent** will generate the agent graph, nodes, and connection code automatically.
+
+    3. **Review and approve** the generated agent structure.
+
+    4. **Run your agent** by clicking the Run button or asking the Queen Bee to execute it.
+
+       <img src="https://github.com/user-attachments/assets/71c38206-2ad5-49aa-bde8-6698d0bc55f5" alt="Running Agent" />
+
+    <Tip>
+      Click "Try a sample agent" to explore pre-built templates. You can run them directly or customize them for your needs.
+    </Tip>
+  </Tab>
+
+  <Tab title="Command Line (TUI)">
+    ### Using the Terminal UI
+
+    ```bash
+    ./hive tui
+    ```
+
+    The TUI provides:
+    - **Agent browser** - View all your agents
+    - **Real-time execution** - Watch agents run with live updates
+    - **Session management** - Resume paused sessions
+    - **Log viewer** - Debug with full execution logs
+
+    Navigate with arrow keys, press `Enter` to select, and `q` to quit.
+  </Tab>
+
+  <Tab title="Code-First">
+    ### Programmatic Agent Creation
+
+    Create an agent by defining its graph structure in Python:
+
+    ```python
+    from framework import Agent, Goal, SuccessCriterion
+    from framework.graph import Node, Edge
+
+    # Define your goal
+    goal = Goal(
+        id="research-report",
+        name="Research Report Generator",
+        success_criteria=[
+            SuccessCriterion(
+                id="comprehensive",
+                description="Report covers all major aspects",
+                metric="llm_judge",
+                weight=0.5
+            )
+        ]
+    )
+
+    # Create nodes
+    research_node = Node(
+        id="research",
+        type="event_loop",
+        system_prompt="Research the topic thoroughly",
+        tools=["web_search", "web_scrape"],
+        outputs=["research_data"]
+    )
+
+    write_node = Node(
+        id="write",
+        type="event_loop",
+        system_prompt="Write a comprehensive report",
+        inputs=["research_data"],
+        outputs=["report"]
+    )
+
+    # Define the agent
+    agent = Agent(
+        goal=goal,
+        nodes=[research_node, write_node],
+        edges=[
+            Edge(source="research", target="write", condition="ON_SUCCESS")
+        ]
+    )
+
+    # Run the agent
+    result = agent.run({"topic": "AI agent frameworks"})
+    print(result["report"])
+    ```
+
+    Save this as `my_agent.py` and run:
+    ```bash
+    ./hive run my_agent.py --input '{"topic": "AI agent frameworks"}'
+    ```
+  </Tab>
+</Tabs>
+
+## Use template agents
+
+Hive includes several pre-built agent templates:
+
+<CardGroup cols={2}>
+  <Card title="Deep Research Agent" icon="magnifying-glass">
+    Comprehensive research with multiple sources, synthesis, and citation
+  </Card>
+  <Card title="Email Inbox Manager" icon="envelope">
+    Automated email triage, categorization, and response drafting
+  </Card>
+  <Card title="Job Application Hunter" icon="briefcase">
+    Search job boards, analyze postings, and generate tailored applications
+  </Card>
+  <Card title="Tech News Reporter" icon="newspaper">
+    Monitor tech news, summarize developments, and create digests
+  </Card>
+</CardGroup>
+
+To use a template:
+
+1. Click **"Try a sample agent"** in the dashboard
+2. Browse available templates
+3. Select a template and click **Run** to execute it as-is
+4. Or click **Customize** to modify it for your needs
+
+## Run agents via CLI
+
+Once an agent is created, you can run it from the command line:
+
+```bash
+# Run an agent
+./hive run <agent-name> --input '{"key": "value"}'
+
+# Run in interactive shell mode
+./hive shell <agent-name>
+
+# Show agent information
+./hive info <agent-name>
+
+# List all agents
+./hive list
+```
+
+## Configuration
+
+Your Hive installation creates several configuration files:
+
+<Accordion title="~/.hive/config.yaml - Global settings">
+  ```yaml
+  llm:
+    provider: anthropic
+    model: claude-3-5-sonnet-20241022
+    
+  credentials:
+    storage: encrypted_file
+    
+  logging:
+    level: info
+    runtime_logs: true
+  ```
+</Accordion>
+
+<Accordion title="~/.hive/credentials - Encrypted credentials">
+  ```
+  # Auto-managed by the credential store
+  # Use: ./hive credentials add <name>
+  # View: ./hive credentials list
+  ```
+</Accordion>
+
+<Accordion title="core/config.yaml - Framework configuration">
+  ```yaml
+  runtime:
+    max_iterations: 10
+    checkpoint_interval: 5
+    
+  monitoring:
+    enable_health_check: true
+    stream_events: true
+    
+  cost_tracking:
+    enable: true
+    budget_per_session: 5.0  # USD
+  ```
+</Accordion>
+
+## Troubleshooting
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+  <Accordion title="'uv' command not found">
+    The quickstart script installs `uv` automatically. If you see this error:
+
+    ```bash
+    # Install uv manually
+    curl -LsSf https://astral.sh/uv/install.sh | sh
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
+    # Add to PATH
+    export PATH="$HOME/.local/bin:$PATH"
+    
+    # Verify installation
+    uv --version
+    ```
   </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+
+  <Accordion title="Port 3000 already in use">
+    If another service is using port 3000:
+
+    ```bash
+    # Find the process
+    lsof -i :3000
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
+    # Kill it or change Hive's port
+    PORT=8080 ./hive tui
+    ```
+  </Accordion>
+
+  <Accordion title="LLM API key errors">
+    Verify your credentials:
+
+    ```bash
+    # List stored credentials
+    ./hive credentials list
+    
+    # Test a credential
+    ./hive credentials test anthropic_api_key
+    
+    # Add or update
+    ./hive credentials add anthropic_api_key
+    ```
+  </Accordion>
+
+  <Accordion title="Python version issues">
+    Hive requires Python 3.11+:
+
+    ```bash
+    # Check your version
+    python --version
+    
+    # If using pyenv
+    pyenv install 3.11
+    pyenv local 3.11
+    
+    # Re-run quickstart
+    ./quickstart.sh
+    ```
   </Accordion>
 </AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Learn key concepts" icon="book" href="/concepts/goals-and-outcomes">
+    Understand goals, graphs, nodes, and self-improvement
+  </Card>
+  <Card title="Build an agent" icon="code" href="/building/creating-agents">
+    Deep dive into creating custom agents
+  </Card>
+  <Card title="Explore tools" icon="wrench" href="/tools/overview">
+    Discover 100+ built-in MCP tools
+  </Card>
+  <Card title="Deploy to production" icon="server" href="/guides/self-hosting">
+    Self-host Hive in your infrastructure
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

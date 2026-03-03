@@ -1,0 +1,349 @@
+---
+title: Defining Goals
+description: Define success criteria and constraints for goal-driven agents
+---
+
+# Defining Goals
+
+Goals are the source of truth for agent behavior in Hive. A well-defined goal tells the agent **what** to achieve, not **how** to achieve it.
+
+## Goal Components
+
+Every goal consists of:
+
+1. **Identity** - Unique ID and human-readable name
+2. **Success Criteria** - Measurable conditions for success
+3. **Constraints** - Boundaries the agent must respect
+4. **Context** - Additional guidance and requirements
+
+## Basic Goal Structure
+
+```python
+from framework.graph import Goal, SuccessCriterion, Constraint
+
+goal = Goal(
+    id="calc-001",
+    name="Calculator",
+    description="Perform mathematical calculations accurately",
+    success_criteria=[
+        SuccessCriterion(
+            id="accuracy",
+            description="Result matches expected mathematical answer",
+            metric="output_equals",
+            target="expected_result",
+            weight=1.0
+        )
+    ],
+    constraints=[
+        Constraint(
+            id="no-crash",
+            description="Handle invalid inputs gracefully, return 'Error'",
+            constraint_type="hard",
+            category="safety",
+            check="output != exception"
+        )
+    ]
+)
+```
+
+## Success Criteria
+
+Success criteria define measurable outcomes. Each criterion has:
+
+- `id` - Unique identifier
+- `description` - Human-readable definition of success
+- `metric` - How to measure (e.g., `output_contains`, `output_equals`, `llm_judge`)
+- `target` - The target value or condition
+- `weight` - Relative importance (0.0 to 1.0)
+
+### Example: Multi-Criteria Goal
+
+```python
+goal = Goal(
+    id="agent-builder",
+    name="Hive Agent Builder",
+    description=(
+        "Build complete, validated Hive agent packages from natural language "
+        "specifications. Produces production-ready Python packages with goals, "
+        "nodes, edges, system prompts, MCP configuration, and tests."
+    ),
+    success_criteria=[
+        SuccessCriterion(
+            id="valid-package",
+            description="Generated agent package passes structural validation",
+            metric="validation_pass",
+            target="true",
+            weight=0.30,
+        ),
+        SuccessCriterion(
+            id="complete-files",
+            description=(
+                "All required files generated: agent.py, config.py, "
+                "nodes/__init__.py, __init__.py, __main__.py, mcp_servers.json"
+            ),
+            metric="file_count",
+            target=">=6",
+            weight=0.25,
+        ),
+        SuccessCriterion(
+            id="user-satisfaction",
+            description="User reviews and approves the generated agent",
+            metric="user_approval",
+            target="true",
+            weight=0.25,
+        ),
+        SuccessCriterion(
+            id="framework-compliance",
+            description=(
+                "Generated code follows framework patterns: STEP 1/STEP 2 "
+                "for client-facing, correct imports, entry_points format"
+            ),
+            metric="pattern_compliance",
+            target="100%",
+            weight=0.20,
+        ),
+    ],
+)
+```
+
+### Metric Types
+
+**Built-in Metrics:**
+- `output_equals` - Exact match
+- `output_contains` - Substring match
+- `output_matches` - Regex match
+- `output_count` - Count items
+- `llm_judge` - LLM evaluation
+- `custom` - Custom evaluation function
+
+**Runtime Evaluation Types:**
+- `success_rate` - Percentage of successful runs
+- `validation_pass` - Boolean validation result
+- `user_approval` - Human approval
+
+## Constraints
+
+Constraints define boundaries. They are either:
+- **Hard** - Violation means failure
+- **Soft** - Violation is discouraged but allowed
+
+### Constraint Structure
+
+```python
+Constraint(
+    id="unique-id",
+    description="What the agent must/should respect",
+    constraint_type="hard",  # or "soft"
+    category="safety",       # safety, cost, time, scope, quality
+    check="validation_expression"
+)
+```
+
+### Real-World Examples
+
+```python
+constraints = [
+    # Safety constraints
+    Constraint(
+        id="dynamic-tool-discovery",
+        description=(
+            "Always discover available tools dynamically via "
+            "discover_mcp_tools before referencing tools in agent designs"
+        ),
+        constraint_type="hard",
+        category="correctness",
+    ),
+    Constraint(
+        id="no-fabricated-tools",
+        description="Only reference tools that exist in hive-tools MCP",
+        constraint_type="hard",
+        category="correctness",
+    ),
+    
+    # Quality constraints
+    Constraint(
+        id="valid-python",
+        description="All generated Python files must be syntactically correct",
+        constraint_type="hard",
+        category="correctness",
+    ),
+    Constraint(
+        id="self-verification",
+        description="Run validation after writing code; fix errors before presenting",
+        constraint_type="hard",
+        category="quality",
+    ),
+    
+    # Accuracy constraints
+    Constraint(
+        id="no-hallucination",
+        description="Only include information found in fetched sources",
+        constraint_type="hard",
+        category="accuracy",
+    ),
+    Constraint(
+        id="source-attribution",
+        description="Every claim must cite its source with a numbered reference",
+        constraint_type="hard",
+        category="accuracy",
+    ),
+]
+```
+
+## Context and Requirements
+
+Provide additional context to guide the agent:
+
+```python
+goal = Goal(
+    id="my-agent",
+    name="My Agent",
+    description="Agent description",
+    success_criteria=[...],
+    constraints=[...],
+    
+    # Additional context
+    context={
+        "domain": "research",
+        "output_format": "markdown",
+        "tone": "professional",
+    },
+    
+    # Required capabilities
+    required_capabilities=[
+        "llm",
+        "web_search",
+        "file_operations",
+    ],
+    
+    # Input/output schemas
+    input_schema={
+        "topic": {"type": "string", "required": True},
+        "depth": {"type": "string", "enum": ["shallow", "deep"]},
+    },
+    output_schema={
+        "report": {"type": "string", "required": True},
+        "sources": {"type": "array", "required": True},
+    },
+)
+```
+
+## Goal Lifecycle
+
+Goals progress through states:
+
+```python
+from framework.graph import GoalStatus
+
+GoalStatus.DRAFT       # Being defined
+GoalStatus.READY       # Ready for agent creation
+GoalStatus.ACTIVE      # Has an agent graph, can execute
+GoalStatus.COMPLETED   # Achieved
+GoalStatus.FAILED      # Could not be achieved
+GoalStatus.SUSPENDED   # Paused for revision
+```
+
+## Evaluating Success
+
+The Goal class provides methods to check success:
+
+```python
+# Check if success criteria are met
+if goal.is_success():
+    print("Goal achieved!")
+
+# Check specific constraint
+if goal.check_constraint("no-crash", output_value):
+    print("Constraint satisfied")
+
+# Generate context for LLM prompts
+prompt_context = goal.to_prompt_context()
+```
+
+### Example: Success Evaluation
+
+```python
+# The goal evaluates success based on weighted criteria
+def is_success(self) -> bool:
+    """Check if all weighted success criteria are met."""
+    if not self.success_criteria:
+        return False
+    
+    total_weight = sum(c.weight for c in self.success_criteria)
+    met_weight = sum(c.weight for c in self.success_criteria if c.met)
+    
+    return met_weight >= total_weight * 0.9  # 90% threshold
+```
+
+## Goal Versioning
+
+Goals can evolve based on runtime feedback:
+
+```python
+goal = Goal(
+    id="my-agent",
+    name="My Agent",
+    description="...",
+    version="1.0.0",
+    parent_version=None,
+    evolution_reason=None,
+)
+
+# Create evolved version
+goal_v2 = Goal(
+    id="my-agent",
+    name="My Agent",
+    description="...",
+    version="2.0.0",
+    parent_version="1.0.0",
+    evolution_reason="Added constraint based on runtime failures",
+    # Updated criteria and constraints
+)
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Be Specific and Measurable">
+    Success criteria should be concrete and measurable. Avoid vague descriptions like "work well" - instead use "respond within 2 seconds" or "accuracy >= 95%".
+  </Accordion>
+  
+  <Accordion title="Use Weighted Criteria">
+    Assign weights to reflect relative importance. Critical criteria get higher weights (0.3-0.4), nice-to-have features get lower weights (0.1-0.2).
+  </Accordion>
+  
+  <Accordion title="Start with Hard Constraints">
+    Hard constraints define non-negotiable boundaries. Start with safety, correctness, and cost constraints before adding quality constraints.
+  </Accordion>
+  
+  <Accordion title="Keep Goals Declarative">
+    Goals define WHAT to achieve, not HOW. The graph structure (nodes and edges) derives from the goal.
+  </Accordion>
+</AccordionGroup>
+
+## Testing Goals
+
+The framework generates tests from your goals:
+
+```python
+# Generate constraint tests
+uv run python -m framework test-generate exports/my_agent --goal my-agent
+
+# Run generated tests
+uv run python -m framework test-run exports/my_agent --goal my-agent
+```
+
+<Note>
+See [Testing Agents](/building/testing-agents) for comprehensive testing workflows.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Node Configuration" icon="circle-nodes" href="/building/node-configuration">
+    Configure nodes that implement your goal
+  </Card>
+  <Card title="Testing Framework" icon="flask" href="/building/testing-agents">
+    Generate tests from success criteria
+  </Card>
+</CardGroup>

@@ -1,0 +1,552 @@
+---
+title: Communication Tools
+description: Send emails, manage Slack channels, and interact with Discord servers
+---
+
+# Communication Tools
+
+Communication tools enable agents to send messages, manage conversations, and interact with popular communication platforms.
+
+## Email
+
+### send_email
+
+Send email via SMTP.
+
+<ParamField path="to" type="string" required>
+  Recipient email address
+</ParamField>
+
+<ParamField path="subject" type="string" required>
+  Email subject line
+</ParamField>
+
+<ParamField path="body" type="string" required>
+  Email body (HTML or plain text)
+</ParamField>
+
+<ParamField path="from_email" type="string">
+  Sender email address (optional if configured)
+</ParamField>
+
+<ParamField path="cc" type="string">
+  CC recipients (comma-separated)
+</ParamField>
+
+<ParamField path="bcc" type="string">
+  BCC recipients (comma-separated)
+</ParamField>
+
+```python Example
+result = send_email(
+    to="user@example.com",
+    subject="Agent Report",
+    body="<h1>Daily Summary</h1><p>Tasks completed: 15</p>",
+    cc="manager@example.com"
+)
+
+if result["success"]:
+    print(f"Email sent: {result['message_id']}")
+```
+
+### Configuration
+
+```bash Environment Variables
+export SMTP_HOST=smtp.gmail.com
+export SMTP_PORT=587
+export SMTP_USER=your-email@gmail.com
+export SMTP_PASSWORD=your-app-password
+```
+
+## Gmail
+
+### gmail_list_messages
+
+List Gmail messages using search queries.
+
+<ParamField path="query" type="string" default="is:unread">
+  Gmail search query
+</ParamField>
+
+<ParamField path="max_results" type="integer" default="100">
+  Maximum messages to return (1-500)
+</ParamField>
+
+<ParamField path="page_token" type="string">
+  Token for fetching next page
+</ParamField>
+
+<ParamField path="account" type="string">
+  Account alias for multi-account support
+</ParamField>
+
+<CodeGroup>
+
+```python Unread Messages
+result = gmail_list_messages(
+    query="is:unread",
+    max_results=50
+)
+
+for msg in result["messages"]:
+    print(f"ID: {msg['id']}, Thread: {msg['threadId']}")
+```
+
+```python Advanced Search
+result = gmail_list_messages(
+    query="from:boss@company.com is:unread label:INBOX",
+    max_results=20
+)
+```
+
+```python Date Range
+result = gmail_list_messages(
+    query="newer_than:7d subject:report",
+    max_results=100
+)
+```
+
+</CodeGroup>
+
+### Common Gmail Queries
+
+| Query | Description |
+|-------|-------------|
+| `is:unread` | Unread messages |
+| `from:user@example.com` | From specific sender |
+| `subject:report` | Subject contains "report" |
+| `has:attachment` | Has attachments |
+| `newer_than:7d` | Last 7 days |
+| `label:INBOX` | In inbox |
+| `is:starred` | Starred messages |
+
+### gmail_get_message
+
+Get detailed message information.
+
+<ParamField path="message_id" type="string" required>
+  Gmail message ID
+</ParamField>
+
+<ParamField path="format" type="string" default="metadata">
+  "metadata", "full", or "minimal"
+</ParamField>
+
+<ParamField path="account" type="string">
+  Account alias
+</ParamField>
+
+```python Example
+result = gmail_get_message(
+    message_id="abc123",
+    format="full"
+)
+
+if result["success"]:
+    print(f"Subject: {result['subject']}")
+    print(f"From: {result['from']}")
+    print(f"Date: {result['date']}")
+    print(f"Body: {result['body']}")
+```
+
+### gmail_modify_message
+
+Modify labels on a message (star, mark read, etc.).
+
+<ParamField path="message_id" type="string" required>
+  Gmail message ID
+</ParamField>
+
+<ParamField path="add_labels" type="list">
+  Labels to add
+</ParamField>
+
+<ParamField path="remove_labels" type="list">
+  Labels to remove
+</ParamField>
+
+<CodeGroup>
+
+```python Star Message
+result = gmail_modify_message(
+    message_id="abc123",
+    add_labels=["STARRED"]
+)
+```
+
+```python Mark as Read
+result = gmail_modify_message(
+    message_id="abc123",
+    remove_labels=["UNREAD"]
+)
+```
+
+```python Multiple Labels
+result = gmail_modify_message(
+    message_id="abc123",
+    add_labels=["STARRED", "IMPORTANT"],
+    remove_labels=["UNREAD"]
+)
+```
+
+</CodeGroup>
+
+### Common Label IDs
+
+- `STARRED` - Star a message
+- `UNREAD` - Mark as unread (remove to mark read)
+- `IMPORTANT` - Mark as important
+- `SPAM` - Mark as spam
+- `TRASH` - Move to trash
+- `INBOX` - Add to inbox
+- `SENT` - Sent messages
+- `DRAFT` - Draft messages
+
+### gmail_trash_message
+
+Move message to trash.
+
+```python
+result = gmail_trash_message(message_id="abc123")
+```
+
+### gmail_create_draft
+
+Create a draft email.
+
+```python
+result = gmail_create_draft(
+    to="user@example.com",
+    subject="Follow-up",
+    html="<p>Hi, following up on our conversation...</p>"
+)
+
+print(f"Draft ID: {result['draft_id']}")
+print(f"Message ID: {result['message_id']}")
+```
+
+### gmail_batch_modify_messages
+
+Modify labels on multiple messages at once.
+
+```python
+message_ids = ["id1", "id2", "id3"]
+
+result = gmail_batch_modify_messages(
+    message_ids=message_ids,
+    add_labels=["STARRED"],
+    remove_labels=["UNREAD"]
+)
+
+print(f"Modified {result['count']} messages")
+```
+
+## Slack
+
+### slack_send_message
+
+Send a message to a Slack channel.
+
+<ParamField path="channel" type="string" required>
+  Channel ID or name (e.g., 'C0123456789' or '#general')
+</ParamField>
+
+<ParamField path="text" type="string" required>
+  Message text (supports Slack markdown)
+</ParamField>
+
+<ParamField path="thread_ts" type="string">
+  Thread timestamp to reply in a thread
+</ParamField>
+
+<ParamField path="account" type="string">
+  Account alias for multi-workspace support
+</ParamField>
+
+```python Example
+result = slack_send_message(
+    channel="#general",
+    text="Hello from the agent! :wave:"
+)
+
+if result["success"]:
+    print(f"Message sent: {result['ts']}")
+```
+
+### slack_list_channels
+
+List channels in the workspace.
+
+```python
+result = slack_list_channels(
+    types="public_channel,private_channel",
+    limit=100
+)
+
+for channel in result["channels"]:
+    print(f"{channel['name']}: {channel['num_members']} members")
+```
+
+### slack_get_channel_history
+
+Get recent messages from a channel.
+
+```python
+result = slack_get_channel_history(
+    channel="C0123456789",
+    limit=20
+)
+
+for msg in result["messages"]:
+    print(f"{msg['user']}: {msg['text']}")
+```
+
+### slack_add_reaction
+
+Add emoji reaction to a message.
+
+```python
+result = slack_add_reaction(
+    channel="C0123456789",
+    timestamp="1234567890.123456",
+    emoji="thumbsup"
+)
+```
+
+### slack_create_channel
+
+Create a new channel.
+
+```python
+result = slack_create_channel(
+    name="project-alpha",
+    is_private=False
+)
+
+print(f"Channel created: {result['channel']['id']}")
+```
+
+### slack_schedule_message
+
+Schedule a message for future delivery.
+
+```python
+import time
+
+# Send in 1 hour
+post_at = int(time.time()) + 3600
+
+result = slack_schedule_message(
+    channel="#general",
+    text="Scheduled reminder",
+    post_at=post_at
+)
+```
+
+### Configuration
+
+```bash Environment Variables
+export SLACK_BOT_TOKEN=xoxb-your-bot-token
+export SLACK_USER_TOKEN=xoxp-your-user-token  # For search API
+```
+
+Get tokens from:
+1. Create app at [api.slack.com/apps](https://api.slack.com/apps)
+2. Add OAuth scopes (channels:read, chat:write, etc.)
+3. Install to workspace
+4. Copy Bot/User OAuth tokens
+
+## Discord
+
+### discord_send_message
+
+Send a message to a Discord channel.
+
+<ParamField path="channel_id" type="string" required>
+  Discord channel ID
+</ParamField>
+
+<ParamField path="content" type="string" required>
+  Message content (max 2000 characters)
+</ParamField>
+
+<ParamField path="tts" type="boolean" default="false">
+  Enable text-to-speech
+</ParamField>
+
+```python Example
+result = discord_send_message(
+    channel_id="123456789",
+    content="Hello from the agent!"
+)
+
+if result["success"]:
+    print(f"Message ID: {result['id']}")
+```
+
+### discord_get_messages
+
+Get recent messages from a channel.
+
+<ParamField path="channel_id" type="string" required>
+  Discord channel ID
+</ParamField>
+
+<ParamField path="limit" type="integer" default="50">
+  Number of messages (1-100)
+</ParamField>
+
+<ParamField path="before" type="string">
+  Get messages before this message ID
+</ParamField>
+
+<ParamField path="after" type="string">
+  Get messages after this message ID
+</ParamField>
+
+```python
+result = discord_get_messages(
+    channel_id="123456789",
+    limit=50
+)
+
+for msg in result["messages"]:
+    print(f"{msg['author']['username']}: {msg['content']}")
+```
+
+### discord_list_channels
+
+List channels in a Discord server.
+
+```python
+result = discord_list_channels(
+    guild_id="123456789",
+    text_only=True
+)
+
+for channel in result["channels"]:
+    print(f"#{channel['name']} ({channel['type']})")
+```
+
+### discord_list_guilds
+
+List Discord servers the bot is in.
+
+```python
+result = discord_list_guilds()
+
+for guild in result["guilds"]:
+    print(f"{guild['name']} (ID: {guild['id']})")
+```
+
+### Configuration
+
+```bash Environment Variables
+export DISCORD_BOT_TOKEN=your-bot-token
+```
+
+Get token from:
+1. Create app at [discord.com/developers/applications](https://discord.com/developers/applications)
+2. Go to Bot section
+3. Copy token
+4. Invite bot to server with appropriate permissions
+
+## Telegram
+
+### telegram_send_message
+
+Send a message via Telegram Bot API.
+
+```python
+result = telegram_send_message(
+    chat_id="123456789",
+    text="Hello from the agent!",
+    parse_mode="Markdown"
+)
+```
+
+### telegram_send_document
+
+Send a document file.
+
+```python
+result = telegram_send_document(
+    chat_id="123456789",
+    document=file_path,
+    caption="Here's the report"
+)
+```
+
+### Configuration
+
+```bash
+export TELEGRAM_BOT_TOKEN=your-bot-token
+```
+
+Create bot with [@BotFather](https://t.me/botfather) on Telegram.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Rate Limit Handling">
+    All communication platforms have rate limits:
+    - **Gmail**: 100 emails/day (free), quota varies
+    - **Slack**: Tier-based limits, use batch operations
+    - **Discord**: 5 requests/second per channel
+    
+    Implement exponential backoff:
+    ```python
+    result = slack_send_message(...)
+    if "error" in result and "rate limit" in result["error"].lower():
+        time.sleep(retry_after)
+    ```
+  </Accordion>
+
+  <Accordion title="Message Formatting">
+    Each platform has different markdown support:
+    - **Slack**: [mrkdwn syntax](https://api.slack.com/reference/surfaces/formatting)
+    - **Discord**: Standard markdown
+    - **Gmail**: HTML or plain text
+    - **Telegram**: Markdown or HTML
+  </Accordion>
+
+  <Accordion title="Batch Operations">
+    Use batch operations when available:
+    ```python
+    # Efficient: Batch modify
+    gmail_batch_modify_messages(
+        message_ids=["id1", "id2", "id3"],
+        add_labels=["STARRED"]
+    )
+    
+    # Inefficient: Loop
+    for msg_id in message_ids:
+        gmail_modify_message(msg_id, add_labels=["STARRED"])
+    ```
+  </Accordion>
+
+  <Accordion title="Error Recovery">
+    Always handle network and auth errors:
+    ```python
+    result = send_email(...)
+    if "error" in result:
+        if "auth" in result["error"].lower():
+            # Re-authenticate
+        elif "timeout" in result["error"].lower():
+            # Retry
+        else:
+            # Log and alert
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Productivity Tools" icon="calendar" href="/tools/productivity">
+    Calendars and CRM systems
+  </Card>
+  <Card title="Cloud APIs" icon="cloud" href="/tools/cloud-apis">
+    Google services and GitHub
+  </Card>
+</CardGroup>

@@ -1,0 +1,444 @@
+---
+title: Creating Custom Tools
+description: Build powerful custom tools for Hive agents using FastMCP
+---
+
+# Creating Custom Tools
+
+This guide explains how to create new tools for the Hive agent framework using FastMCP. Tools are Python functions that agents can call to interact with external systems and services.
+
+## Quick Start Checklist
+
+<Steps>
+  <Step title="Create Tool Module">
+    Create folder under `src/aden_tools/tools/<tool_name>/`
+  </Step>
+  <Step title="Implement Tool Function">
+    Use `@mcp.tool()` decorator pattern
+  </Step>
+  <Step title="Add Documentation">
+    Create `README.md` with usage examples
+  </Step>
+  <Step title="Register Tool">
+    Add to `src/aden_tools/tools/__init__.py`
+  </Step>
+  <Step title="Write Tests">
+    Add tests in `tests/tools/`
+  </Step>
+</Steps>
+
+## Tool Structure
+
+Each tool lives in its own module:
+
+```
+src/aden_tools/tools/my_tool/
+├── __init__.py           # Export register_tools function
+├── my_tool.py            # Tool implementation
+└── README.md             # Documentation
+```
+
+## Basic Implementation
+
+Create a simple tool that doesn't require external API credentials:
+
+```python my_tool.py
+from fastmcp import FastMCP
+
+def register_tools(mcp: FastMCP) -> None:
+    """Register my tools with the MCP server."""
+
+    @mcp.tool()
+    def my_tool(
+        query: str,
+        limit: int = 10,
+    ) -> dict:
+        """
+        Search for items matching a query.
+
+        Use this when you need to find specific information.
+
+        Args:
+            query: The search query (1-500 chars)
+            limit: Maximum number of results (1-100)
+
+        Returns:
+            Dict with search results or error dict
+        """
+        # Validate inputs
+        if not query or len(query) > 500:
+            return {"error": "Query must be 1-500 characters"}
+        if limit < 1 or limit > 100:
+            limit = max(1, min(100, limit))
+
+        try:
+            results = do_search(query, limit)
+            return {
+                "success": True,
+                "query": query,
+                "results": results,
+                "total": len(results),
+            }
+        except Exception as e:
+            return {"error": f"Search failed: {str(e)}"}
+```
+
+### Export the Tool
+
+In `__init__.py`:
+
+```python __init__.py
+from .my_tool import register_tools
+
+__all__ = ["register_tools"]
+```
+
+### Register in Main Module
+
+In `src/aden_tools/tools/__init__.py`, add to the registration list:
+
+```python
+from .my_tool import register_tools as register_my_tool
+
+def register_all_tools(mcp: FastMCP, credentials=None) -> list[str]:
+    # ... existing registrations
+    register_my_tool(mcp)
+    return list(mcp._tool_manager._tools.keys())
+```
+
+## Tools With Credentials
+
+For tools requiring API keys, follow the credential management pattern:
+
+### Step 1: Add Credentials Parameter
+
+```python my_api_tool.py
+from typing import TYPE_CHECKING
+import os
+
+if TYPE_CHECKING:
+    from aden_tools.credentials import CredentialStoreAdapter
+
+def register_tools(
+    mcp: FastMCP,
+    credentials: CredentialStoreAdapter | None = None,
+) -> None:
+    def _get_token() -> str | None:
+        """Get API token from credentials or environment."""
+        if credentials is not None:
+            return credentials.get("my_api")
+        return os.getenv("MY_API_KEY")
+
+    @mcp.tool()
+    def my_api_tool(query: str) -> dict:
+        """Tool that requires an API key."""
+        token = _get_token()
+        if not token:
+            return {
+                "error": "MY_API_KEY environment variable not set",
+                "help": "Get an API key at https://example.com/api-keys",
+            }
+
+        # Use the API key...
+        response = call_api(token, query)
+        return {"success": True, "data": response}
+```
+
+### Step 2: Create CredentialSpec
+
+Add to `src/aden_tools/credentials/<category>.py`:
+
+```python
+from .base import CredentialSpec
+
+MY_CREDENTIALS = {
+    "my_api": CredentialSpec(
+        env_var="MY_API_KEY",
+        tools=["my_api_tool"],  # List ALL tool names
+        required=True,
+        help_url="https://example.com/api-keys",
+        description="API key for My Service",
+        credential_id="my_api",
+        credential_key="api_key",
+    ),
+}
+```
+
+<Note>
+The `tools` list must include every tool name that requires this credential. CI will enforce this.
+</Note>
+
+### Step 3: Merge Credentials
+
+In `credentials/__init__.py`:
+
+```python
+from .my_category import MY_CREDENTIALS
+
+CREDENTIAL_SPECS = {
+    **LLM_CREDENTIALS,
+    **SEARCH_CREDENTIALS,
+    **MY_CREDENTIALS,  # Add new category
+}
+```
+
+## Tool Parameters
+
+### Required vs Optional
+
+<ParamField path="query" type="string" required>
+  Required parameters have no default value
+</ParamField>
+
+<ParamField path="limit" type="integer" default="10">
+  Optional parameters have default values
+</ParamField>
+
+### Type Annotations
+
+Use Python type hints for automatic validation:
+
+```python
+from typing import Literal
+
+@mcp.tool()
+def my_tool(
+    text: str,                           # String parameter
+    count: int = 10,                     # Integer with default
+    enabled: bool = True,                # Boolean flag
+    mode: Literal["fast", "slow"] = "fast",  # Enum choice
+    tags: list[str] | None = None,       # Optional list
+) -> dict:
+    """Tool with various parameter types."""
+    pass
+```
+
+## Error Handling
+
+Return error dicts instead of raising exceptions:
+
+<CodeGroup>
+
+```python Validation Error
+if not query:
+    return {"error": "Query is required"}
+if len(query) > 500:
+    return {"error": "Query too long (max 500 chars)"}
+```
+
+```python API Error
+try:
+    result = api.call()
+    return {"success": True, "data": result}
+except APIError as e:
+    return {
+        "error": f"API call failed: {str(e)}",
+        "help": "Check your API key and try again"
+    }
+```
+
+```python Network Error
+except httpx.TimeoutException:
+    return {"error": "Request timed out"}
+except httpx.RequestError as e:
+    return {"error": f"Network error: {str(e)}"}
+```
+
+</CodeGroup>
+
+## Return Values
+
+Always return structured dictionaries:
+
+### Success Response
+
+```python
+return {
+    "success": True,
+    "query": query,
+    "results": [...],
+    "total": len(results),
+    "metadata": {...}
+}
+```
+
+### Error Response
+
+```python
+return {
+    "error": "Descriptive error message",
+    "help": "Suggestion for fixing the issue",
+    "error_code": "INVALID_API_KEY"  # Optional
+}
+```
+
+## Documentation
+
+The docstring becomes the tool description in MCP:
+
+```python
+@mcp.tool()
+def my_tool(query: str, limit: int = 10) -> dict:
+    """
+    One-line summary of what the tool does.
+
+    More detailed explanation of the tool's purpose and when to use it.
+    Can span multiple paragraphs.
+
+    Args:
+        query: Description of the query parameter (include constraints)
+        limit: Description of limit parameter (include range)
+
+    Returns:
+        Description of what the tool returns
+
+    Examples:
+        my_tool(query="fastmcp", limit=5)
+        my_tool(query="python agents")
+    """
+```
+
+### README Template
+
+Create a `README.md` with:
+
+```markdown
+# My Tool
+
+Brief description of what the tool does.
+
+## Use Cases
+
+- Use case 1
+- Use case 2
+
+## Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| query | string | required | Search query |
+| limit | integer | 10 | Max results |
+
+## Environment Variables
+
+- `MY_API_KEY` - API key from example.com
+
+## Examples
+
+```python
+result = my_tool(query="fastmcp", limit=5)
+```
+
+## Error Codes
+
+- `INVALID_API_KEY` - API key is invalid or expired
+- `RATE_LIMIT` - Too many requests
+```
+
+## Testing
+
+Create tests in `tests/tools/test_my_tool.py`:
+
+```python test_my_tool.py
+import pytest
+from fastmcp import FastMCP
+from aden_tools.tools.my_tool import register_tools
+
+@pytest.fixture
+def mcp():
+    """Create a FastMCP instance with tools registered."""
+    server = FastMCP("test")
+    register_tools(server)
+    return server
+
+def test_my_tool_basic(mcp):
+    """Test basic tool functionality."""
+    tool_fn = mcp._tool_manager._tools["my_tool"].fn
+    result = tool_fn(query="test", limit=5)
+    
+    assert result["success"] is True
+    assert "results" in result
+    assert len(result["results"]) <= 5
+
+def test_my_tool_validation(mcp):
+    """Test input validation."""
+    tool_fn = mcp._tool_manager._tools["my_tool"].fn
+    result = tool_fn(query="", limit=5)
+    
+    assert "error" in result
+    assert "required" in result["error"].lower()
+
+def test_my_tool_with_credentials():
+    """Test with mock credentials."""
+    from aden_tools.credentials import CredentialStoreAdapter
+    
+    creds = CredentialStoreAdapter.for_testing({
+        "my_api": "test-key-123"
+    })
+    
+    mcp = FastMCP("test")
+    register_tools(mcp, credentials=creds)
+    tool_fn = mcp._tool_manager._tools["my_api_tool"].fn
+    
+    # Test with valid credentials
+    result = tool_fn(query="test")
+    assert "success" in result
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Validate All Inputs">
+    Check parameters before making API calls:
+    - String length limits
+    - Numeric ranges
+    - Required vs optional
+    - Format validation (email, URL, etc.)
+  </Accordion>
+
+  <Accordion title="Handle Rate Limits">
+    Implement retry logic with exponential backoff:
+    ```python
+    for attempt in range(max_retries):
+        response = httpx.get(url)
+        if response.status_code == 429:
+            time.sleep(2 ** attempt)
+            continue
+        break
+    ```
+  </Accordion>
+
+  <Accordion title="Sanitize Error Messages">
+    Never expose sensitive data in error messages:
+    - Remove API keys from exception text
+    - Truncate long error messages
+    - Provide actionable help text
+  </Accordion>
+
+  <Accordion title="Use Timeouts">
+    Always set request timeouts:
+    ```python
+    httpx.get(url, timeout=30.0)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## CI Enforcement
+
+The following tests run in CI:
+
+- **Module Structure** - Every tool exports `register_tools`
+- **Function Signature** - Correct parameter types
+- **Credential Specs** - All credential-using tools have specs
+- **Tool Coverage** - All tools in specs actually exist
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MCP Server" icon="server" href="/tools/mcp-server-guide">
+    Run your tools via MCP
+  </Card>
+  <Card title="Tool Examples" icon="code" href="/tools/file-system">
+    See real tool implementations
+  </Card>
+</CardGroup>

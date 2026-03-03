@@ -1,0 +1,348 @@
+---
+title: Human-in-the-loop
+description: Strategic human oversight at critical decision points in agent workflows
+---
+
+Human-in-the-Loop (HITL) is a critical design pattern for AI agents. It ensures that humans remain in control of important decisions while still benefiting from AI automation. Instead of fully autonomous operation, agents pause at critical points to request human input, approval, or guidance.
+
+```
+Agent working → Critical decision → PAUSE → Human reviews → Continue/Modify
+```
+
+## Why HITL matters
+
+### Safety
+
+- Prevents harmful actions before they occur
+- Catches AI errors and hallucinations
+- Maintains accountability
+
+### Quality
+
+- Ensures outputs meet standards
+- Incorporates domain expertise
+- Validates complex decisions
+
+### Trust
+
+- Builds user confidence in AI systems
+- Provides transparency
+- Enables gradual autonomy increase
+
+### Compliance
+
+- Meets regulatory requirements (GDPR, financial, healthcare)
+- Creates audit trails
+- Maintains human responsibility
+
+## HITL in Hive
+
+In Hive, HITL is enabled by setting `client_facing=True` on an event loop node. These nodes pause and ask a person for input.
+
+```python examples/templates/deep_research_agent/nodes/__init__.py
+from framework.graph import NodeSpec
+
+# Node 1: Intake (client-facing)
+intake_node = NodeSpec(
+    id="intake",
+    name="Research Intake",
+    description="Discuss the research topic with the user, clarify scope",
+    node_type="event_loop",
+    client_facing=True,  # This node interacts with humans
+    input_keys=["topic"],
+    output_keys=["research_brief"],
+    system_prompt="""
+You are a research intake specialist. The user wants to research a topic.
+Have a brief conversation to clarify what they need.
+
+**STEP 1 — Read and respond:**
+1. Read the topic provided
+2. If it's vague, ask 1-2 clarifying questions
+3. If it's clear, confirm your understanding
+
+**STEP 2 — After the user confirms, call set_output:**
+- set_output("research_brief", "A clear paragraph describing what to research")
+""",
+)
+
+# Node 3: Review (client-facing)
+review_node = NodeSpec(
+    id="review",
+    name="Review Findings",
+    description="Present findings to user and decide next steps",
+    node_type="event_loop",
+    client_facing=True,  # Another HITL checkpoint
+    input_keys=["findings", "sources", "gaps"],
+    output_keys=["needs_more_research", "feedback"],
+    system_prompt="""
+Present the research findings to the user clearly and concisely.
+
+**STEP 1 — Present:**
+1. **Summary** (2-3 sentences of what was found)
+2. **Key Findings** (bulleted, with confidence levels)
+3. **Gaps** (what's still unclear)
+
+Ask: Are they satisfied, or do they want deeper research?
+
+**STEP 2 — After the user responds, call set_output:**
+- set_output("needs_more_research", "true")  — if they want more
+- set_output("needs_more_research", "false") — if satisfied
+""",
+)
+```
+
+## HITL protocol
+
+Hive defines a standardized protocol for HITL interactions:
+
+```python core/framework/graph/hitl.py
+from dataclasses import dataclass
+from enum import StrEnum
+
+class HITLInputType(StrEnum):
+    """Type of input expected from human."""
+    FREE_TEXT = "free_text"      # Open-ended text response
+    STRUCTURED = "structured"    # Specific fields to fill
+    SELECTION = "selection"      # Choose from options
+    APPROVAL = "approval"        # Yes/no/modify decision
+    MULTI_FIELD = "multi_field" # Multiple related inputs
+
+@dataclass
+class HITLQuestion:
+    """A single question to ask the human."""
+    id: str
+    question: str
+    input_type: HITLInputType = HITLInputType.FREE_TEXT
+    options: list[str] = field(default_factory=list)  # For SELECTION
+    fields: dict[str, str] = field(default_factory=dict)  # For STRUCTURED
+    required: bool = True
+    help_text: str = ""
+
+@dataclass
+class HITLRequest:
+    """Formal request for human input at a pause node."""
+    objective: str              # What we're trying to accomplish
+    current_state: str          # Where we are in the process
+    questions: list[HITLQuestion]
+    missing_info: list[str]     # What information is needed
+    instructions: str = ""
+    examples: list[str] = field(default_factory=list)
+
+@dataclass
+class HITLResponse:
+    """Human's response to a HITL request."""
+    request_id: str
+    answers: dict[str, Any]     # {question_id: answer}
+    raw_input: str = ""         # Raw text if provided
+    response_time_ms: int = 0
+```
+
+## How HITL nodes work
+
+When the agent hits a client-facing node:
+
+1. **Agent pauses**: Execution stops at the node
+2. **State saved**: Full conversation and memory state persisted
+3. **Request created**: HITL request formatted for user
+4. **User notified**: Through UI, webhook, email, etc.
+5. **Waits**: Session sits paused (minutes, hours, or days)
+6. **User responds**: Provides input through configured channel
+7. **Execution resumes**: Picks up exactly where it left off
+
+```python core/framework/graph/executor.py
+@dataclass
+class ExecutionResult:
+    """Result of executing a graph."""
+    success: bool
+    output: dict[str, Any]
+    paused_at: str | None = None        # Node ID where paused for HITL
+    session_state: dict[str, Any]       # State to resume from
+```
+
+This isn't a blunt "stop everything" — the framework supports structured questions:
+
+<Accordion title="Free text">
+  Open-ended questions where the user types a response.
+</Accordion>
+
+<Accordion title="Multiple choice">
+  Select from predefined options (e.g., "Approve", "Reject", "Modify").
+</Accordion>
+
+<Accordion title="Yes/no approvals">
+  Binary decisions with optional modification.
+</Accordion>
+
+<Accordion title="Multi-field forms">
+  Structured data entry (e.g., budget approval with amount, justification, approval level).
+</Accordion>
+
+## HITL patterns
+
+### Pattern 1: Approval gates
+
+Agent completes work, then waits for human approval before proceeding.
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Agent     │────▶│   APPROVE?  │────▶│   Action    │
+│   works     │     │   (Human)   │     │   taken     │
+└─────────────┘     └─────────────┘     └─────────────┘
+                           │
+                           │ Reject
+                           ▼
+                    ┌─────────────┐
+                    │   Revise    │
+                    └─────────────┘
+```
+
+**Use when**: Actions are irreversible or high-impact (publishing content, sending emails, financial transactions).
+
+### Pattern 2: Confidence-based escalation
+
+Agent handles confident decisions autonomously, escalates uncertain ones.
+
+```python
+if confidence_score > 0.9:
+    proceed_autonomously()
+else:
+    request_human_review()
+```
+
+**Use when**: Volume is high, most cases are straightforward (customer support routing, content moderation).
+
+### Pattern 3: Interactive refinement
+
+Human and agent work together iteratively.
+
+```python examples/templates/deep_research_agent/agent.py
+# Example: Research agent with multiple HITL checkpoints
+edges = [
+    EdgeSpec(id="intake-to-research", source="intake", target="research"),
+    EdgeSpec(id="research-to-review", source="research", target="review"),
+    # If user wants more: loop back to research
+    EdgeSpec(
+        id="review-to-research-feedback",
+        source="review",
+        target="research",
+        condition=EdgeCondition.CONDITIONAL,
+        condition_expr="needs_more_research == True",
+    ),
+    # If user satisfied: proceed to report
+    EdgeSpec(
+        id="review-to-report",
+        source="review",
+        target="report",
+        condition=EdgeCondition.CONDITIONAL,
+        condition_expr="needs_more_research == False",
+    ),
+]
+```
+
+**Use when**: Output quality is paramount, and human expertise improves results (document drafting, research reports).
+
+## Parsing human responses
+
+Hive includes intelligent response parsing:
+
+```python core/framework/graph/hitl.py
+class HITLProtocol:
+    @staticmethod
+    def parse_response(
+        raw_input: str,
+        request: HITLRequest,
+        use_haiku: bool = True,
+    ) -> HITLResponse:
+        """Parse human's raw input into structured response.
+        
+        Uses Haiku to intelligently extract answers for each question.
+        """
+        # If multiple questions asked, uses LLM to extract each answer
+        # Falls back to simple parsing if LLM unavailable
+```
+
+This means users can respond naturally:
+
+```
+User input: "Yes, looks good but can you add more details about pricing?"
+
+Parsed:
+{
+  "approval": "yes_with_modifications",
+  "feedback": "add more details about pricing"
+}
+```
+
+## Best practices
+
+### 1. Minimize friction
+
+Provide all context the human needs to make a decision quickly:
+
+```python
+HITLRequest(
+    objective="Send personalized outreach to prospect",
+    current_state="Draft message created, ready for review",
+    questions=[...],
+    instructions="Review the message below. Check for tone, accuracy, and personalization.",
+)
+```
+
+### 2. Design for scale
+
+<Warning>
+Consider what happens with 10 requests per day vs 100 vs 1000. Don't create approval bottlenecks.
+</Warning>
+
+### 3. Learn from decisions
+
+Every human decision is data for [evolution](/concepts/evolution):
+
+- Track approval rates by node
+- Identify patterns in rejections
+- Reduce future intervention needs
+- Improve agent confidence calibration
+
+### 4. Handle timeouts gracefully
+
+What if the human doesn't respond?
+
+```python
+timeout_config = {
+    "timeout_minutes": 60,
+    "reminders": [30, 45],
+    "escalation_chain": ["team_lead", "manager"],
+    "fallback_action": "reject",  # or "approve", "escalate"
+}
+```
+
+## HITL and evolution
+
+Every time a human provides input, that decision becomes data the evolution process can learn from:
+
+- **Approval patterns**: Which types of outputs consistently get approved?
+- **Rejection reasons**: What needs improvement?
+- **Modification patterns**: What do humans change most often?
+- **Escalation triggers**: What causes uncertainty?
+
+Over time, the agent learns to handle more cases autonomously, escalating only genuinely uncertain situations.
+
+## Example: Multi-checkpoint workflow
+
+Here's a complete agent with multiple HITL nodes:
+
+```python examples/templates/deep_research_agent/agent.py
+nodes = [
+    intake_node,    # HITL: Clarify research topic
+    research_node,  # Autonomous: Search and compile
+    review_node,    # HITL: Review findings, decide next steps
+    report_node,    # HITL: Present final report, answer questions
+]
+
+# Graph visits client-facing nodes at strategic checkpoints:
+# 1. Start: Clarify what to research
+# 2. Middle: Review findings before finalizing
+# 3. End: Deliver results and handle follow-ups
+```
+
+This pattern balances autonomy (agent does the heavy lifting) with oversight (human guides direction and validates quality).

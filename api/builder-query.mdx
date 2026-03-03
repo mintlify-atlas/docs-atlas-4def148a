@@ -1,0 +1,344 @@
+---
+title: 'BuilderQuery API'
+description: 'Query interface for analyzing agent run data'
+---
+
+## Overview
+
+The `BuilderQuery` class provides the interface for analyzing agent behavior across runs. It's designed around the questions Builder needs to answer when improving agents:
+
+1. What happened? (summaries, narratives)
+2. Why did it fail? (failure analysis, decision traces)
+3. What patterns emerge? (across runs, across nodes)
+4. What should we change? (suggestions)
+
+## Class: BuilderQuery
+
+```python
+from framework import BuilderQuery
+
+query = BuilderQuery("/path/to/storage")
+```
+
+### Constructor
+
+<ParamField path="storage_path" type="str | Path" required>
+  Path to the storage directory containing run data
+</ParamField>
+
+---
+
+## What Happened?
+
+### get_run_summary()
+
+Get a quick summary of a run.
+
+```python
+summary = query.get_run_summary("run_20240315_143022_a1b2")
+if summary:
+    print(f"Status: {summary.status}")
+    print(f"Decisions: {summary.decision_count}")
+```
+
+<ParamField path="run_id" type="str" required>
+  The run ID to retrieve
+</ParamField>
+
+<ResponseField name="summary" type="RunSummary | None">
+  Summary object with status, decision_count, success_rate, etc., or None if not found
+</ResponseField>
+
+---
+
+### get_full_run()
+
+Get the complete run with all decisions.
+
+```python
+run = query.get_full_run("run_20240315_143022_a1b2")
+if run:
+    for decision in run.decisions:
+        print(decision.intent)
+```
+
+<ParamField path="run_id" type="str" required>
+  The run ID to retrieve
+</ParamField>
+
+<ResponseField name="run" type="Run | None">
+  Complete Run object, or None if not found
+</ResponseField>
+
+---
+
+### list_runs_for_goal()
+
+Get summaries of all runs for a specific goal.
+
+```python
+runs = query.list_runs_for_goal("calc-001")
+for run in runs:
+    print(f"{run.id}: {run.status}")
+```
+
+<ParamField path="goal_id" type="str" required>
+  The goal ID to query
+</ParamField>
+
+<ResponseField name="runs" type="list[RunSummary]">
+  List of run summaries for this goal
+</ResponseField>
+
+---
+
+### get_recent_failures()
+
+Get recent failed runs.
+
+```python
+failures = query.get_recent_failures(limit=5)
+for failure in failures:
+    print(f"{failure.id}: {failure.narrative}")
+```
+
+<ParamField path="limit" type="int" default="10">
+  Maximum number of failures to return
+</ParamField>
+
+<ResponseField name="failures" type="list[RunSummary]">
+  List of failed run summaries, most recent first
+</ResponseField>
+
+---
+
+## Why Did It Fail?
+
+### analyze_failure()
+
+Deep analysis of why a run failed.
+
+```python
+analysis = query.analyze_failure("run_20240315_143022_a1b2")
+if analysis:
+    print(f"Failure Point: {analysis.failure_point}")
+    print(f"Root Cause: {analysis.root_cause}")
+    print("\nDecision Chain:")
+    for decision in analysis.decision_chain:
+        print(f"  - {decision}")
+    print("\nSuggestions:")
+    for suggestion in analysis.suggestions:
+        print(f"  → {suggestion}")
+```
+
+<ParamField path="run_id" type="str" required>
+  The failed run ID to analyze
+</ParamField>
+
+<ResponseField name="analysis" type="FailureAnalysis | None">
+  FailureAnalysis object with:
+  - `run_id` (str): The run ID
+  - `failure_point` (str): Where it failed
+  - `root_cause` (str): Why it failed
+  - `decision_chain` (list[str]): Decisions leading to failure
+  - `problems` (list[str]): Reported problems
+  - `suggestions` (list[str]): Improvement suggestions
+</ResponseField>
+
+---
+
+### get_decision_trace()
+
+Get a readable trace of all decisions in a run.
+
+```python
+trace = query.get_decision_trace("run_20240315_143022_a1b2")
+for decision in trace:
+    print(decision)
+```
+
+<ParamField path="run_id" type="str" required>
+  The run ID to trace
+</ParamField>
+
+<ResponseField name="trace" type="list[str]">
+  List of human-readable decision summaries
+</ResponseField>
+
+---
+
+## What Patterns Emerge?
+
+### find_patterns()
+
+Find patterns across runs for a goal.
+
+```python
+patterns = query.find_patterns("calc-001")
+if patterns:
+    print(f"Success Rate: {patterns.success_rate:.1%}")
+    print(f"\nCommon Failures:")
+    for failure, count in patterns.common_failures:
+        print(f"  - {failure}: {count} times")
+    print(f"\nProblematic Nodes:")
+    for node, rate in patterns.problematic_nodes:
+        print(f"  - {node}: {rate:.1%} failure rate")
+```
+
+<ParamField path="goal_id" type="str" required>
+  The goal ID to analyze
+</ParamField>
+
+<ResponseField name="patterns" type="PatternAnalysis | None">
+  PatternAnalysis object with:
+  - `goal_id` (str): The goal ID
+  - `run_count` (int): Number of runs analyzed
+  - `success_rate` (float): Overall success rate
+  - `common_failures` (list[tuple[str, int]]): Most common errors and counts
+  - `problematic_nodes` (list[tuple[str, float]]): Nodes with high failure rates
+  - `decision_patterns` (dict): Common decision patterns
+</ResponseField>
+
+---
+
+### compare_runs()
+
+Compare two runs to understand what differed.
+
+```python
+comparison = query.compare_runs("run_001", "run_002")
+print(f"Run 1: {comparison['run_1']['status']}")
+print(f"Run 2: {comparison['run_2']['status']}")
+print("\nDifferences:")
+for diff in comparison['differences']:
+    print(f"  - {diff}")
+```
+
+<ParamField path="run_id_1" type="str" required>
+  First run ID
+</ParamField>
+
+<ParamField path="run_id_2" type="str" required>
+  Second run ID
+</ParamField>
+
+<ResponseField name="comparison" type="dict[str, Any]">
+  Comparison with:
+  - `run_1`: First run metrics
+  - `run_2`: Second run metrics
+  - `differences`: List of key differences
+</ResponseField>
+
+---
+
+### get_node_performance()
+
+Get performance metrics for a specific node across all runs.
+
+```python
+perf = query.get_node_performance("calculator")
+print(f"Total decisions: {perf['total_decisions']}")
+print(f"Success rate: {perf['success_rate']:.1%}")
+print(f"Avg latency: {perf['avg_latency_ms']}ms")
+print(f"Total tokens: {perf['total_tokens']}")
+```
+
+<ParamField path="node_id" type="str" required>
+  The node ID to analyze
+</ParamField>
+
+<ResponseField name="performance" type="dict[str, Any]">
+  Performance metrics with:
+  - `node_id` (str): The node ID
+  - `total_decisions` (int): Total decisions made
+  - `success_rate` (float): Success rate (0-1)
+  - `avg_latency_ms` (int): Average latency
+  - `total_tokens` (int): Total tokens used
+  - `decision_type_distribution` (dict): Breakdown by decision type
+</ResponseField>
+
+---
+
+## What Should We Change?
+
+### suggest_improvements()
+
+Generate improvement suggestions based on run analysis.
+
+```python
+suggestions = query.suggest_improvements("calc-001")
+for suggestion in suggestions:
+    print(f"[{suggestion['priority']}] {suggestion['type']}")
+    print(f"  Target: {suggestion['target']}")
+    print(f"  Reason: {suggestion['reason']}")
+    print(f"  Recommendation: {suggestion['recommendation']}")
+```
+
+<ParamField path="goal_id" type="str" required>
+  The goal ID to analyze
+</ParamField>
+
+<ResponseField name="suggestions" type="list[dict[str, Any]]">
+  List of improvement suggestions, each with:
+  - `type` (str): Type of suggestion (node_improvement, error_handling, architecture)
+  - `target` (str): What to improve (node_id, error message, goal_id)
+  - `reason` (str): Why this needs improvement
+  - `recommendation` (str): What to do
+  - `priority` (str): high, medium, or low
+</ResponseField>
+
+---
+
+## Example Usage
+
+```python
+from framework import BuilderQuery
+
+# Initialize query interface
+query = BuilderQuery("/tmp/agent-storage")
+
+# Get all runs for a goal
+runs = query.list_runs_for_goal("calc-001")
+print(f"Found {len(runs)} runs")
+
+# Analyze a failure
+failed_runs = [r for r in runs if r.status == "failed"]
+if failed_runs:
+    analysis = query.analyze_failure(failed_runs[0].id)
+    if analysis:
+        print(f"\nFailure Analysis for {analysis.run_id}:")
+        print(f"Root Cause: {analysis.root_cause}")
+        print(f"\nSuggestions:")
+        for suggestion in analysis.suggestions:
+            print(f"  → {suggestion}")
+
+# Find patterns across runs
+patterns = query.find_patterns("calc-001")
+if patterns:
+    print(f"\nSuccess Rate: {patterns.success_rate:.1%}")
+    print(f"Runs Analyzed: {patterns.run_count}")
+    
+    if patterns.common_failures:
+        print("\nMost Common Failures:")
+        for failure, count in patterns.common_failures[:3]:
+            print(f"  - {failure}: {count} occurrences")
+    
+    if patterns.problematic_nodes:
+        print("\nProblematic Nodes:")
+        for node, rate in patterns.problematic_nodes:
+            print(f"  - {node}: {rate:.1%} failure rate")
+
+# Get improvement suggestions
+suggestions = query.suggest_improvements("calc-001")
+print(f"\nImprovement Suggestions ({len(suggestions)}):")
+for suggestion in suggestions:
+    print(f"\n[{suggestion['priority'].upper()}] {suggestion['type']}")
+    print(f"  {suggestion['recommendation']}")
+
+# Check node performance
+node_perf = query.get_node_performance("calculator")
+print(f"\nNode Performance: calculator")
+print(f"  Total decisions: {node_perf['total_decisions']}")
+print(f"  Success rate: {node_perf['success_rate']:.1%}")
+print(f"  Avg latency: {node_perf['avg_latency_ms']}ms")
+```

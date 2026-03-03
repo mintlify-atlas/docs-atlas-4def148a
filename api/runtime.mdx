@@ -1,0 +1,424 @@
+---
+title: 'Runtime API'
+description: 'Interface for recording agent decisions and outcomes'
+---
+
+## Overview
+
+The `Runtime` class is the core interface agents use to record their behavior. It captures decisions, outcomes, and problems in a structured format that the Builder LLM can analyze to improve agent performance.
+
+## Class: Runtime
+
+```python
+from framework import Runtime
+
+runtime = Runtime("/path/to/storage")
+```
+
+### Constructor
+
+<ParamField path="storage_path" type="str | Path" required>
+  Path to the storage directory for run data
+</ParamField>
+
+---
+
+## Run Lifecycle
+
+### start_run()
+
+Start a new run for a goal.
+
+```python
+run_id = runtime.start_run(
+    goal_id="goal_123",
+    goal_description="Qualify sales leads",
+    input_data={"lead_name": "Acme Corp"}
+)
+```
+
+<ParamField path="goal_id" type="str" required>
+  The ID of the goal being pursued
+</ParamField>
+
+<ParamField path="goal_description" type="str" default="">
+  Human-readable description of the goal
+</ParamField>
+
+<ParamField path="input_data" type="dict[str, Any] | None" default="None">
+  Initial input data for the run
+</ParamField>
+
+<ResponseField name="run_id" type="str">
+  Unique identifier for this run (format: `run_YYYYMMDD_HHMMSS_hash`)
+</ResponseField>
+
+---
+
+### end_run()
+
+End the current run and save results.
+
+```python
+runtime.end_run(
+    success=True,
+    narrative="Qualified 10 leads successfully",
+    output_data={"qualified_count": 10}
+)
+```
+
+<ParamField path="success" type="bool" required>
+  Whether the run achieved its goal
+</ParamField>
+
+<ParamField path="narrative" type="str" default="">
+  Human-readable summary of what happened
+</ParamField>
+
+<ParamField path="output_data" type="dict[str, Any] | None" default="None">
+  Final output of the run
+</ParamField>
+
+---
+
+### set_node()
+
+Set the current node context for subsequent decisions.
+
+```python
+runtime.set_node("lead-qualifier")
+```
+
+<ParamField path="node_id" type="str" required>
+  ID of the node being executed
+</ParamField>
+
+---
+
+## Decision Recording
+
+### decide()
+
+Record a decision the agent made. This is the primary method for capturing agent behavior.
+
+```python
+decision_id = runtime.decide(
+    intent="Determine if lead has budget",
+    options=[
+        {
+            "id": "ask",
+            "description": "Ask the lead directly",
+            "action_type": "tool_call",
+            "action_params": {"tool": "send_email"},
+            "pros": ["Direct answer"],
+            "cons": ["Might be awkward"],
+            "confidence": 0.6
+        },
+        {
+            "id": "infer",
+            "description": "Infer from company size",
+            "action_type": "generate",
+            "pros": ["Fast", "Non-intrusive"],
+            "cons": ["Less accurate"],
+            "confidence": 0.8
+        }
+    ],
+    chosen="infer",
+    reasoning="Company data is available, asking would be slower",
+    node_id="lead-qualifier",
+    decision_type=DecisionType.TOOL_SELECTION,
+    constraints=["no_spam", "under_5_seconds"],
+    context={"company_size": 500, "industry": "tech"}
+)
+```
+
+<ParamField path="intent" type="str" required>
+  What the agent was trying to accomplish
+</ParamField>
+
+<ParamField path="options" type="list[dict[str, Any]]" required>
+  List of options considered. Each option should have:
+  - `id` (str): Unique identifier
+  - `description` (str): What this option does
+  - `action_type` (str): "tool_call", "generate", "delegate", etc.
+  - `action_params` (dict, optional): Parameters for the action
+  - `pros` (list[str], optional): Why this might be good
+  - `cons` (list[str], optional): Why this might be bad
+  - `confidence` (float, optional): Agent's confidence (0-1)
+</ParamField>
+
+<ParamField path="chosen" type="str" required>
+  ID of the chosen option
+</ParamField>
+
+<ParamField path="reasoning" type="str" required>
+  Why the agent chose this option
+</ParamField>
+
+<ParamField path="node_id" type="str | None" default="None">
+  Which node made this decision (uses current if not set)
+</ParamField>
+
+<ParamField path="decision_type" type="DecisionType" default="DecisionType.CUSTOM">
+  Type of decision: TOOL_SELECTION, PARAMETER_CHOICE, PATH_CHOICE, OUTPUT_FORMAT, RETRY_STRATEGY, DELEGATION, TERMINATION, CUSTOM
+</ParamField>
+
+<ParamField path="constraints" type="list[str] | None" default="None">
+  Active constraints that influenced the decision
+</ParamField>
+
+<ParamField path="context" type="dict[str, Any] | None" default="None">
+  Additional context available when deciding
+</ParamField>
+
+<ResponseField name="decision_id" type="str">
+  The decision ID (use to record outcome later)
+</ResponseField>
+
+---
+
+### record_outcome()
+
+Record the outcome of a decision after executing the action.
+
+```python
+runtime.record_outcome(
+    decision_id=decision_id,
+    success=True,
+    result={"has_budget": True, "estimated": "$50k"},
+    summary="Inferred budget of $50k from company revenue",
+    state_changes={"lead_qualified": True},
+    tokens_used=150,
+    latency_ms=420
+)
+```
+
+<ParamField path="decision_id" type="str" required>
+  ID returned from decide()
+</ParamField>
+
+<ParamField path="success" type="bool" required>
+  Whether the action succeeded
+</ParamField>
+
+<ParamField path="result" type="Any" default="None">
+  The actual result/output
+</ParamField>
+
+<ParamField path="error" type="str | None" default="None">
+  Error message if failed
+</ParamField>
+
+<ParamField path="summary" type="str" default="">
+  Human-readable summary of what happened
+</ParamField>
+
+<ParamField path="state_changes" type="dict[str, Any] | None" default="None">
+  What state changed as a result
+</ParamField>
+
+<ParamField path="tokens_used" type="int" default="0">
+  LLM tokens consumed
+</ParamField>
+
+<ParamField path="latency_ms" type="int" default="0">
+  Time taken in milliseconds
+</ParamField>
+
+---
+
+## Problem Reporting
+
+### report_problem()
+
+Report a problem that occurred during execution.
+
+```python
+problem_id = runtime.report_problem(
+    severity="warning",
+    description="API rate limit approaching",
+    decision_id=decision_id,
+    root_cause="Too many requests in short time",
+    suggested_fix="Implement exponential backoff"
+)
+```
+
+<ParamField path="severity" type="str" required>
+  Problem severity: "critical", "warning", or "minor"
+</ParamField>
+
+<ParamField path="description" type="str" required>
+  What went wrong
+</ParamField>
+
+<ParamField path="decision_id" type="str | None" default="None">
+  Which decision caused this (if known)
+</ParamField>
+
+<ParamField path="root_cause" type="str | None" default="None">
+  Why it went wrong (if known)
+</ParamField>
+
+<ParamField path="suggested_fix" type="str | None" default="None">
+  What might fix it (if known)
+</ParamField>
+
+<ResponseField name="problem_id" type="str">
+  The problem ID
+</ResponseField>
+
+---
+
+## Convenience Methods
+
+### decide_and_execute()
+
+Record a decision and immediately execute it.
+
+```python
+decision_id, result = runtime.decide_and_execute(
+    intent="Calculate tax",
+    options=[{"id": "calc", "description": "Run calculator"}],
+    chosen="calc",
+    reasoning="Standard calculation",
+    executor=lambda: calculate_tax(amount)
+)
+```
+
+<ParamField path="executor" type="Callable" required>
+  Function to call to execute the action
+</ParamField>
+
+<ResponseField name="tuple" type="tuple[str, Any]">
+  Tuple of (decision_id, result)
+</ResponseField>
+
+---
+
+### quick_decision()
+
+Record a simple decision with a single action (no alternatives).
+
+```python
+decision_id = runtime.quick_decision(
+    intent="Format output",
+    action="Convert to JSON",
+    reasoning="Standard format",
+    node_id="formatter"
+)
+```
+
+<ParamField path="intent" type="str" required>
+  What the agent is trying to do
+</ParamField>
+
+<ParamField path="action" type="str" required>
+  What it's doing
+</ParamField>
+
+<ParamField path="reasoning" type="str" required>
+  Why
+</ParamField>
+
+<ParamField path="node_id" type="str | None" default="None">
+  Node making the decision
+</ParamField>
+
+<ResponseField name="decision_id" type="str">
+  The decision ID
+</ResponseField>
+
+---
+
+## Properties
+
+### current_run
+
+Get the current run object for inspection.
+
+```python
+run = runtime.current_run
+if run:
+    print(f"Run ID: {run.id}")
+    print(f"Decisions: {len(run.decisions)}")
+```
+
+<ResponseField name="current_run" type="Run | None">
+  The current Run object, or None if no run is active
+</ResponseField>
+
+---
+
+### execution_id
+
+Get the current execution ID for trace correlation.
+
+```python
+exec_id = runtime.execution_id
+```
+
+<ResponseField name="execution_id" type="str">
+  The execution ID (32-character hex string)
+</ResponseField>
+
+---
+
+## Example Usage
+
+```python
+from framework import Runtime
+from framework.schemas.decision import DecisionType
+
+# Initialize runtime
+runtime = Runtime("/tmp/agent-storage")
+
+# Start a run
+run_id = runtime.start_run(
+    goal_id="qualify-leads",
+    goal_description="Qualify incoming sales leads",
+    input_data={"lead_name": "Acme Corp"}
+)
+
+# Set node context
+runtime.set_node("budget-checker")
+
+# Record a decision
+decision_id = runtime.decide(
+    intent="Check if lead has budget",
+    options=[
+        {"id": "ask", "description": "Ask directly"},
+        {"id": "infer", "description": "Infer from company size"}
+    ],
+    chosen="infer",
+    reasoning="Company data available",
+    decision_type=DecisionType.PATH_CHOICE
+)
+
+# Execute and record outcome
+try:
+    result = check_budget_from_company_data()
+    runtime.record_outcome(
+        decision_id=decision_id,
+        success=True,
+        result=result,
+        summary=f"Estimated budget: {result['budget']}"
+    )
+except Exception as e:
+    runtime.record_outcome(
+        decision_id=decision_id,
+        success=False,
+        error=str(e)
+    )
+    runtime.report_problem(
+        severity="critical",
+        description="Budget check failed",
+        decision_id=decision_id
+    )
+
+# End the run
+runtime.end_run(
+    success=True,
+    narrative="Lead qualified with estimated budget",
+    output_data={"qualified": True, "budget": "$50k"}
+)
+```

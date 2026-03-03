@@ -1,0 +1,655 @@
+---
+title: Installation
+description: Detailed setup instructions for Hive agent framework on macOS, Linux, and Windows
+---
+
+## System requirements
+
+Hive requires the following:
+
+- **Operating system**: macOS, Linux, or Windows (with WSL)
+- **Python**: 3.11, 3.12, or 3.13
+- **Memory**: 4GB RAM minimum (8GB+ recommended for browser automation)
+- **Disk space**: 2GB for dependencies and browser binaries
+
+<Warning>
+  **Windows users:** Use WSL (Windows Subsystem for Linux) or Git Bash. Core automation scripts may not execute correctly in Command Prompt or PowerShell.
+</Warning>
+
+## Prerequisites
+
+### Python 3.11+
+
+Hive requires Python 3.11 or higher. Check your version:
+
+```bash
+python3 --version
+# Python 3.12.0
+```
+
+If you need to install or upgrade Python:
+
+<Tabs>
+  <Tab title="macOS">
+    ```bash
+    # Using Homebrew
+    brew install python@3.12
+    
+    # Verify installation
+    python3 --version
+    ```
+  </Tab>
+  
+  <Tab title="Linux (Ubuntu/Debian)">
+    ```bash
+    sudo apt update
+    sudo apt install python3.12 python3-pip
+    
+    # Verify installation
+    python3 --version
+    ```
+  </Tab>
+  
+  <Tab title="Windows (WSL)">
+    ```bash
+    # Inside WSL terminal
+    sudo apt update
+    sudo apt install python3.12 python3-pip
+    
+    # Verify installation
+    python3 --version
+    ```
+  </Tab>
+</Tabs>
+
+### Git
+
+Git is required to clone the repository:
+
+```bash
+git --version
+# git version 2.39.0
+```
+
+If not installed:
+- **macOS**: `brew install git`
+- **Linux**: `sudo apt install git`  
+- **Windows**: Install [Git for Windows](https://git-scm.com/download/win) or use WSL
+
+### Node.js 20+ (optional)
+
+Node.js is required only if you want to use the browser-based dashboard. The framework works without it.
+
+```bash
+node --version
+# v20.0.0
+```
+
+If not installed:
+
+```bash
+# Using nvm (recommended)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.bashrc  # or ~/.zshrc
+nvm install 20
+nvm use 20
+```
+
+<Tip>
+  The quickstart script automatically installs Node.js 20 via nvm if not present.
+</Tip>
+
+## Installation methods
+
+### Method 1: Automated quickstart (recommended)
+
+The quickstart script handles everything in one command:
+
+```bash
+git clone https://github.com/aden-hive/hive.git
+cd hive
+./quickstart.sh
+```
+
+The script performs these steps:
+
+<Steps>
+  <Step title="Check Python version">
+    Verifies Python 3.11+ is installed. Exits with an error if not found.
+  </Step>
+  
+  <Step title="Install uv package manager">
+    Installs `uv` if not already present. `uv` is a fast Python package installer used by Hive.
+    
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+  </Step>
+  
+  <Step title="Install Python packages">
+    Installs both workspace packages (`core` and `tools`) and their dependencies:
+    
+    ```bash
+    uv sync
+    ```
+    
+    This creates two virtual environments:
+    - `core/.venv` - Framework runtime and graph executor
+    - `tools/.venv` - MCP tools for agent capabilities
+  </Step>
+  
+  <Step title="Install Playwright browser">
+    Downloads Chromium for browser automation:
+    
+    ```bash
+    uv run python -m playwright install chromium
+    ```
+  </Step>
+  
+  <Step title="Build frontend dashboard">
+    If Node.js 20+ is detected, builds the React dashboard:
+    
+    ```bash
+    cd core/frontend
+    npm install
+    npm run build
+    ```
+    
+    Output is written to `core/frontend/dist/`.
+  </Step>
+  
+  <Step title="Configure LLM provider">
+    Prompts you to select an LLM provider and enter your API key. Saves configuration to `~/.hive/configuration.json`.
+  </Step>
+  
+  <Step title="Initialize credential store">
+    Generates an encryption key and creates the credential store at `~/.hive/credentials/`.
+  </Step>
+  
+  <Step title="Install hive CLI">
+    Creates a symlink at `~/.local/bin/hive` for the CLI:
+    
+    ```bash
+    ln -s /path/to/hive/hive ~/.local/bin/hive
+    ```
+  </Step>
+  
+  <Step title="Verify installation">
+    Runs import checks to ensure all packages are correctly installed.
+  </Step>
+</Steps>
+
+After completion, the dashboard will launch automatically at `http://localhost:8787`.
+
+### Method 2: Manual installation
+
+If you prefer to install step-by-step:
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/aden-hive/hive.git
+    cd hive
+    ```
+  </Step>
+  
+  <Step title="Install uv package manager">
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
+    ```
+  </Step>
+  
+  <Step title="Install Python dependencies">
+    ```bash
+    # From the repository root
+    uv sync
+    ```
+    
+    This installs both workspace packages defined in `pyproject.toml`:
+    
+    ```toml
+    [tool.uv.workspace]
+    members = ["core", "tools"]
+    ```
+  </Step>
+  
+  <Step title="Install Playwright (optional)">
+    For browser automation:
+    
+    ```bash
+    uv run python -m playwright install chromium
+    ```
+  </Step>
+  
+  <Step title="Set up environment variables">
+    Add your LLM API key to your shell profile:
+    
+    ```bash
+    echo 'export ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.bashrc
+    source ~/.bashrc
+    ```
+    
+    Get API keys from:
+    - [Anthropic Console](https://console.anthropic.com/settings/keys)
+    - [OpenAI Platform](https://platform.openai.com/api-keys)  
+    - [Google AI Studio](https://aistudio.google.com/apikey)
+  </Step>
+  
+  <Step title="Create LLM configuration">
+    Create `~/.hive/configuration.json`:
+    
+    ```json
+    {
+      "llm": {
+        "provider": "anthropic",
+        "model": "claude-opus-4-6",
+        "max_tokens": 32768,
+        "api_key_env_var": "ANTHROPIC_API_KEY"
+      },
+      "gcu_enabled": true,
+      "created_at": "2026-03-03T10:30:00+00:00"
+    }
+    ```
+  </Step>
+  
+  <Step title="Initialize credential store">
+    Generate an encryption key:
+    
+    ```bash
+    mkdir -p ~/.hive/secrets
+    uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > ~/.hive/secrets/credential_key
+    chmod 600 ~/.hive/secrets/credential_key
+    ```
+    
+    Create credential store directories:
+    
+    ```bash
+    mkdir -p ~/.hive/credentials/{credentials,metadata}
+    echo '{"credentials": {}, "version": "1.0"}' > ~/.hive/credentials/metadata/index.json
+    ```
+  </Step>
+  
+  <Step title="Install hive CLI">
+    ```bash
+    mkdir -p ~/.local/bin
+    ln -s $(pwd)/hive ~/.local/bin/hive
+    
+    # Add to PATH if not already
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+    source ~/.bashrc
+    ```
+  </Step>
+</Steps>
+
+## Package structure
+
+Hive uses a `uv` workspace layout with two packages:
+
+### Framework package (core/)
+
+The core runtime and graph executor:
+
+```toml
+# core/pyproject.toml
+[project]
+name = "framework"
+version = "0.5.1"
+description = "Goal-driven agent runtime with builder-friendly observability"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.0",
+  "anthropic>=0.40.0",
+  "httpx>=0.27.0",
+  "litellm>=1.81.0",
+  "mcp>=1.0.0",
+  "fastmcp>=2.0.0",
+  "textual>=1.0.0",
+  "tools",
+]
+```
+
+<Note>
+  The framework package depends on the `tools` package via workspace reference: `tools = { workspace = true }`
+</Note>
+
+### Tools package (tools/)
+
+MCP tools for agent capabilities:
+
+```bash
+tools/
+├── src/aden_tools/
+│   ├── tools/
+│   │   ├── web_search_tool/
+│   │   ├── web_scrape_tool/
+│   │   ├── file_system_toolkits/
+│   │   ├── gmail_tool/
+│   │   ├── slack_tool/
+│   │   └── ... (100+ tools)
+│   └── utils/
+└── mcp_server.py
+```
+
+Each tool follows the FastMCP registration pattern:
+
+```python
+# tools/src/aden_tools/tools/example_tool/example_tool.py
+from fastmcp import FastMCP
+
+def register_tools(mcp: FastMCP) -> None:
+    @mcp.tool()
+    def example_tool(
+        message: str,
+        uppercase: bool = False,
+        repeat: int = 1,
+    ) -> str:
+        """Process text messages."""
+        result = message
+        if uppercase:
+            result = result.upper()
+        if repeat > 1:
+            result = " ".join([result] * repeat)
+        return result
+```
+
+## Verify installation
+
+After installation, verify everything is working:
+
+<CodeGroup>
+```bash Import checks
+# Verify framework package
+uv run python -c "import framework; print('✓ framework')"
+
+# Verify tools package  
+uv run python -c "import aden_tools; print('✓ aden_tools')"
+
+# Verify LiteLLM
+uv run python -c "import litellm; print('✓ litellm')"
+```
+
+```bash CLI check
+# Verify hive CLI is accessible
+hive --version
+
+# List available commands
+hive --help
+```
+
+```bash Run example agent
+# Run the minimal manual agent
+uv run python core/examples/manual_agent.py
+
+# Expected output:
+# Setting up Manual Agent...
+# Executing agent with input: name='Alice'...
+# 
+# Success!
+# Path taken: greeter -> uppercaser
+# Final output: HELLO, ALICE!
+```
+</CodeGroup>
+
+## Configuration reference
+
+### LLM configuration
+
+The `~/.hive/configuration.json` file controls LLM behavior:
+
+```json
+{
+  "llm": {
+    "provider": "anthropic",
+    "model": "claude-opus-4-6",
+    "max_tokens": 32768,
+    "api_key_env_var": "ANTHROPIC_API_KEY"
+  },
+  "gcu_enabled": true,
+  "created_at": "2026-03-03T10:30:00+00:00"
+}
+```
+
+#### Supported providers
+
+<Tabs>
+  <Tab title="Anthropic (recommended)">
+    ```json
+    {
+      "llm": {
+        "provider": "anthropic",
+        "model": "claude-opus-4-6",
+        "max_tokens": 32768,
+        "api_key_env_var": "ANTHROPIC_API_KEY"
+      }
+    }
+    ```
+    
+    Available models:
+    - `claude-opus-4-6` - Most capable (recommended)
+    - `claude-sonnet-4-5-20250929` - Best balance
+    - `claude-sonnet-4-20250514` - Fast + capable
+    - `claude-haiku-4-5-20251001` - Fast + cheap
+  </Tab>
+  
+  <Tab title="OpenAI">
+    ```json
+    {
+      "llm": {
+        "provider": "openai",
+        "model": "gpt-5.2",
+        "max_tokens": 16384,
+        "api_key_env_var": "OPENAI_API_KEY"
+      }
+    }
+    ```
+    
+    Available models:
+    - `gpt-5.2` - Most capable
+    - `gpt-5-mini` - Fast + cheap
+    - `gpt-4o` - Vision support
+  </Tab>
+  
+  <Tab title="Google Gemini">
+    ```json
+    {
+      "llm": {
+        "provider": "gemini",
+        "model": "gemini-3-flash-preview",
+        "max_tokens": 8192,
+        "api_key_env_var": "GEMINI_API_KEY"
+      }
+    }
+    ```
+    
+    Available models:
+    - `gemini-3-flash-preview` - Fast (recommended)
+    - `gemini-3.1-pro-preview` - Best quality
+  </Tab>
+  
+  <Tab title="Local (Ollama)">
+    ```json
+    {
+      "llm": {
+        "provider": "ollama",
+        "model": "ollama/llama3",
+        "max_tokens": 8192,
+        "api_base": "http://localhost:11434"
+      }
+    }
+    ```
+    
+    Ensure Ollama is running:
+    ```bash
+    ollama serve
+    ```
+  </Tab>
+</Tabs>
+
+### Credential store
+
+The credential store encrypts API keys and secrets:
+
+```bash
+~/.hive/
+├── configuration.json          # LLM config
+├── credentials/
+│   ├── credentials/            # Encrypted credential files
+│   │   ├── slack_api_key.enc
+│   │   └── github_token.enc
+│   └── metadata/
+│       └── index.json          # Credential registry
+└── secrets/
+    └── credential_key          # Fernet encryption key (chmod 600)
+```
+
+The encryption key is read from `~/.hive/secrets/credential_key` or the `HIVE_CREDENTIAL_KEY` environment variable.
+
+<Warning>
+  Keep your credential key secure. If lost, you'll need to re-enter all credentials.
+</Warning>
+
+## Troubleshooting
+
+### Python version issues
+
+**Problem**: `Python 3.11+ is required (found 3.9.0)`
+
+**Solution**: Install Python 3.11 or higher:
+
+```bash
+# macOS
+brew install python@3.12
+
+# Linux
+sudo apt install python3.12
+
+# Verify
+python3 --version
+```
+
+### uv installation fails
+
+**Problem**: `curl: command not found` or `uv installation failed`
+
+**Solution**: Install curl first, then retry:
+
+```bash
+# macOS
+brew install curl
+
+# Linux
+sudo apt install curl
+
+# Then install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### Import errors
+
+**Problem**: `ModuleNotFoundError: No module named 'framework'`
+
+**Solution**: Ensure packages are installed in the workspace:
+
+```bash
+cd /path/to/hive
+uv sync
+
+# Verify
+uv run python -c "import framework; print('ok')"
+```
+
+<Note>
+  Hive uses a workspace layout. Do NOT run `pip install -e .` from the repository root, as it will create a placeholder package.
+</Note>
+
+### API key not recognized
+
+**Problem**: `AuthenticationError: Invalid API key`
+
+**Solution**: Verify the key is set in your environment:
+
+```bash
+# Check if set
+echo $ANTHROPIC_API_KEY
+
+# If empty, add to shell profile
+echo 'export ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.bashrc
+source ~/.bashrc
+
+# Verify again
+echo $ANTHROPIC_API_KEY
+```
+
+### Playwright browser issues
+
+**Problem**: `Executable doesn't exist at /path/to/chromium`
+
+**Solution**: Install Playwright browsers:
+
+```bash
+uv run python -m playwright install chromium
+
+# If that fails, install system dependencies
+sudo apt install libnss3 libnspr4 libdbus-1-3 libatk1.0-0
+```
+
+### Frontend build fails
+
+**Problem**: `npm ERR! code ELIFECYCLE`
+
+**Solution**: Clear cache and rebuild:
+
+```bash
+cd core/frontend
+rm -rf node_modules package-lock.json tsconfig*.tsbuildinfo
+npm install
+npm run build
+```
+
+### Permission denied on hive CLI
+
+**Problem**: `bash: hive: Permission denied`
+
+**Solution**: Make the script executable:
+
+```bash
+chmod +x /path/to/hive/hive
+```
+
+## Uninstall
+
+To completely remove Hive:
+
+```bash
+# Remove the repository
+rm -rf /path/to/hive
+
+# Remove configuration and credentials
+rm -rf ~/.hive
+
+# Remove CLI symlink
+rm ~/.local/bin/hive
+
+# Remove environment variables from shell profile
+# Edit ~/.bashrc or ~/.zshrc and remove the lines:
+# export ANTHROPIC_API_KEY="..."
+# export PATH="$HOME/.local/bin:$PATH"
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Run the quickstart" icon="rocket" href="/quickstart">
+    Build your first agent in 5 minutes
+  </Card>
+  <Card title="Learn key concepts" icon="book" href="/concepts/agent-graphs">
+    Understand graphs, nodes, and self-correction
+  </Card>
+  <Card title="Build production agents" icon="server" href="/guides/self-hosting">
+    Add monitoring, HITL nodes, and cost controls
+  </Card>
+  <Card title="Join Discord" icon="discord" href="https://discord.com/invite/MXE49hrKDk">
+    Get help from the community
+  </Card>
+</CardGroup>

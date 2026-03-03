@@ -1,0 +1,311 @@
+---
+title: Frequently Asked Questions
+description: Common questions about the Hive agent framework
+---
+
+## General
+
+<AccordionGroup>
+  <Accordion title="What is Hive?" icon="circle-question">
+    Hive is an open-source agent framework that lets you build autonomous, reliable, self-improving AI agents without hardcoding workflows. You define your goal through conversation with the Hive coding agent (queen), and the framework generates a node graph with dynamically created connection code. When things break, the framework captures failure data, evolves the agent, and redeploys.
+  </Accordion>
+
+  <Accordion title="Who is Hive for?">
+    Hive is designed for developers and teams who want to build **production-grade AI agents** without manually wiring complex workflows.
+    
+    Hive is a good fit if you:
+    - Want AI agents that execute real business processes, not demos
+    - Need fast or high volume agent execution
+    - Need self-healing and adaptive agents that improve over time
+    - Require human-in-the-loop control, observability, and cost limits
+    - Plan to run agents in production environments
+  </Accordion>
+
+  <Accordion title="What makes Hive different from other agent frameworks?">
+    Hive generates your entire agent system from natural language goals using a coding agent—you don't hardcode workflows or manually define graphs. When agents fail, the framework automatically captures failure data, evolves the agent graph, and redeploys. This self-improving loop is unique to Aden.
+    
+    | Traditional Frameworks | Hive |
+    |------------------------|------|
+    | Hardcode agent workflows | Describe goals in natural language |
+    | Manual graph definition | Auto-generated agent graphs |
+    | Reactive error handling | Outcome-evaluation and adaptiveness |
+    | Static tool configurations | Dynamic SDK-wrapped nodes |
+    | Separate monitoring setup | Built-in real-time observability |
+    | DIY budget management | Integrated cost controls & degradation |
+  </Accordion>
+
+  <Accordion title="Is Hive open-source?">
+    Yes, Hive is fully open-source under the Apache License 2.0. We actively encourage community contributions and collaboration.
+  </Accordion>
+</AccordionGroup>
+
+## LLM Providers & Models
+
+<AccordionGroup>
+  <Accordion title="What LLM providers does Hive support?" icon="brain">
+    Hive supports 100+ LLM providers through LiteLLM integration, including:
+    - **OpenAI** (GPT-4, GPT-4o)
+    - **Anthropic** (Claude models)
+    - **Google Gemini**
+    - **DeepSeek**
+    - **Mistral**
+    - **Groq**
+    - And many more
+    
+    Simply set the appropriate API key environment variable and specify the model name. We recommend using Claude, GLM, and Gemini as they have the best performance.
+  </Accordion>
+
+  <Accordion title="Can I use Hive with local AI models like Ollama?">
+    Yes! Hive supports local models through LiteLLM. Simply use the model name format:
+    
+    ```python
+    model="ollama/llama3"
+    model="ollama/mistral"
+    ```
+    
+    Ensure Ollama is running locally before using local models.
+  </Accordion>
+
+  <Accordion title="Does Hive support Claude Code subscriptions?">
+    Yes! v0.5.1 added first-class support for Claude Code subscriptions. Set `use_claude_code_subscription: true` in `~/.hive/configuration.json` and the framework will read OAuth tokens from `~/.claude/.credentials.json` with automatic refresh.
+  </Accordion>
+
+  <Accordion title="Can I use custom OpenAI-compatible endpoints?">
+    Yes! You can configure `api_base` in your `~/.hive/configuration.json` to route traffic through any OpenAI-compatible API, including:
+    - Azure OpenAI
+    - vLLM
+    - Ollama
+    - Custom inference servers
+  </Accordion>
+</AccordionGroup>
+
+## Features & Capabilities
+
+<AccordionGroup>
+  <Accordion title="Can Hive handle complex, production-scale use cases?" icon="building">
+    Yes. Hive is explicitly designed for production environments with features like:
+    - Automatic failure recovery
+    - Real-time observability
+    - Cost controls
+    - Horizontal scaling support
+    
+    The framework handles both simple automations and complex multi-agent workflows.
+  </Accordion>
+
+  <Accordion title="Does Hive support human-in-the-loop workflows?">
+    Yes, Hive fully supports human-in-the-loop (HITL) workflows through intervention nodes that pause execution for human input. These include:
+    - Configurable timeouts
+    - Escalation policies
+    - Multiple question types (free text, structured, selection, approval, multi-field)
+    - State persistence across pause/resume
+    
+    This allows seamless collaboration between human experts and AI agents.
+  </Accordion>
+
+  <Accordion title="Can Hive agents interact with external tools and APIs?">
+    Yes. Aden's SDK-wrapped nodes provide built-in tool access, and the framework supports flexible tool ecosystems. Agents can integrate with:
+    - External APIs
+    - Databases
+    - File systems
+    - Web services
+    - MCP (Model Context Protocol) servers
+    
+    Hive includes 100+ pre-built tools covering file operations, web scraping, data processing, communication (email, Slack, Discord), CRM integrations, and more.
+  </Accordion>
+
+  <Accordion title="How does cost control work in Hive?">
+    Hive provides granular budget controls including:
+    - Spending limits
+    - Throttles
+    - Automatic model degradation policies
+    
+    You can set budgets at the team, agent, or workflow level, with real-time cost tracking and alerts. Token tracking for reasoning and cache tokens is on the roadmap.
+  </Accordion>
+
+  <Accordion title="Does Hive support multi-agent coordination?">
+    Yes! v0.5.1 introduced multi-graph agent sessions, allowing you to load, manage, and switch between multiple agent graphs within a single session. The Hive Coder uses multi-graph internally to coordinate between worker agents and supervisory agents.
+  </Accordion>
+
+  <Accordion title="Can agents evolve and self-improve?">
+    Yes, this is a core feature of Hive. When agents fail, the framework:
+    1. Captures failure data
+    2. Analyzes the failure against defined goals
+    3. Evolves the agent graph through the Hive Coder
+    4. Redeploys the improved agent
+    
+    This creates a continuous improvement loop without manual intervention.
+  </Accordion>
+</AccordionGroup>
+
+## Development & Deployment
+
+<AccordionGroup>
+  <Accordion title="What programming languages does Hive support?" icon="code">
+    The Hive framework is built in Python 3.11+. A JavaScript/TypeScript SDK is on the roadmap.
+  </Accordion>
+
+  <Accordion title="Can I self-host Hive?">
+    Yes, Hive is designed for self-hosting. The framework includes:
+    - Docker support with Python 3.11-slim base
+    - Playwright Chromium for browser automation
+    - Health check endpoints
+    - Volume mounts for persistence
+    - Webhook server for external triggers
+    
+    See the [self-hosting guide](/quickstart) for complete setup instructions.
+  </Accordion>
+
+  <Accordion title="Does Hive support Docker deployment?">
+    Yes! Hive provides official Docker support with:
+    - Python 3.11-slim base image
+    - Playwright Chromium installation
+    - Non-root user for security
+    - Health check endpoint
+    - Port 4001 exposed for MCP server
+    - Volume mount for workspace persistence
+  </Accordion>
+
+  <Accordion title="Can agents be triggered by webhooks or timers?">
+    Yes! Hive supports multiple entry points:
+    - **Manual** - Direct user invocation
+    - **Webhook** - HTTP POST triggers
+    - **Timer** - Cron expressions or interval_minutes
+    - **Event** - Custom event triggers
+    - **API** - Programmatic invocation
+    
+    Each entry point supports configurable isolation levels (isolated, shared, synchronized).
+  </Accordion>
+
+  <Accordion title="How do I test agents?">
+    Hive includes a comprehensive testing framework:
+    
+    ```bash
+    # Run lint and format checks
+    make check
+    
+    # Run core framework tests
+    make test
+    
+    # Run tests for a specific agent
+    PYTHONPATH=exports uv run python -m agent_name test
+    ```
+    
+    The framework supports:
+    - Level 0: Output key validation
+    - Level 1: Literal checks (output_contains, output_equals)
+    - Level 2: Conversation-aware LLM judgment
+    - Custom test cases with success criteria
+  </Accordion>
+</AccordionGroup>
+
+## Getting Started
+
+<AccordionGroup>
+  <Accordion title="How do I install Hive?" icon="download">
+    ```bash
+    # Clone the repository
+    git clone https://github.com/aden-hive/hive.git
+    cd hive
+    
+    # Run quickstart setup
+    ./quickstart.sh
+    ```
+    
+    This sets up:
+    - Core framework and MCP tools
+    - Encrypted credential store
+    - LLM provider configuration
+    - All required Python dependencies
+    
+    <Warning>
+    Hive uses a `uv` workspace layout and is NOT installed with `pip install`. Running `pip install -e .` will create a placeholder package and Hive will not function correctly.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Where can I find examples and documentation?">
+    - **Complete Documentation:** [docs.adenhq.com](https://docs.adenhq.com/)
+    - **Example Agents:** `/resources/examples`
+    - **Templates:** [GitHub Templates](https://github.com/aden-hive/hive/tree/main/examples/templates)
+    - **Recipes:** [GitHub Recipes](https://github.com/aden-hive/hive/tree/main/examples/recipes)
+    - **Developer Guide:** Comprehensive guide in `docs/`
+  </Accordion>
+
+  <Accordion title="How do I build my first agent?">
+    The easiest way is to use the Hive Coder:
+    
+    ```bash
+    # Launch the Coder directly
+    hive code
+    
+    # Or from TUI
+    hive tui
+    # Press Ctrl+E to escalate to Coder
+    ```
+    
+    Describe what you want your agent to do, and the Hive Coder will:
+    1. Generate the goal definition with success criteria
+    2. Create the node graph and connection code
+    3. Wire in the appropriate tools
+    4. Generate test cases
+    5. Export a runnable agent package
+  </Accordion>
+
+  <Accordion title="What tools and integrations are available?">
+    Hive includes 100+ pre-built tools:
+    
+    - **File Operations** (36+ tools) - read, write, edit, search, diff/patch
+    - **Web Tools** - Search, scraper, Exa, News, SerpAPI
+    - **Data Tools** - CSV, Excel, PDF, Vision, Time
+    - **Communication** - Email, Gmail, Slack, Discord, Telegram, Google Docs
+    - **CRM/API** - HubSpot, GitHub, Apollo, BigQuery, Razorpay, Cal.com
+    - **Security/Scanning** - DNS, SSL/TLS, Port Scanner, Subdomain Enumerator
+    
+    All tools support MCP (Model Context Protocol) for easy integration.
+  </Accordion>
+</AccordionGroup>
+
+## Contributing & Support
+
+<AccordionGroup>
+  <Accordion title="How can I contribute to Hive?" icon="code-pull-request">
+    Contributions are welcome! Follow these steps:
+    
+    1. Find or create an issue and get assigned
+    2. Fork the repository
+    3. Create your feature branch
+    4. Make your changes and add tests
+    5. Ensure `make check` and `make test` pass
+    6. Submit a Pull Request
+    
+    See the [contributing guide](/resources/contributing) for detailed guidelines.
+    
+    <Note>
+    We're especially looking for help building tools, integrations, and example agents. Check [issue #2805](https://github.com/aden-hive/hive/issues/2805) for opportunities.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Where can I get help?">
+    - **Discord:** [Join our community](https://discord.com/invite/MXE49hrKDk)
+    - **GitHub Issues:** [Report bugs or request features](https://github.com/adenhq/hive/issues)
+    - **Twitter/X:** [@adenhq](https://x.com/aden_hq)
+    - **LinkedIn:** [Company Page](https://www.linkedin.com/company/teamaden/)
+  </Accordion>
+
+  <Accordion title="Where do I report security vulnerabilities?">
+    Please do NOT report security vulnerabilities through public GitHub issues.
+    
+    Instead, email: contact@adenhq.com with:
+    1. A description of the vulnerability
+    2. Steps to reproduce the issue
+    3. Potential impact
+    4. Any possible mitigations you've identified
+    
+    We will acknowledge receipt within 48 hours and aim to resolve critical vulnerabilities within 7 days.
+    
+    See our [security policy](/resources/security) for details.
+  </Accordion>
+</AccordionGroup>
+
+## Still Have Questions?
+
+Join our [Discord community](https://discord.com/invite/MXE49hrKDk) or open an issue on [GitHub](https://github.com/adenhq/hive/issues).

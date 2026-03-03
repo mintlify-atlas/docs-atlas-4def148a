@@ -1,0 +1,437 @@
+---
+title: 'Goal Schema'
+description: 'Define what agents should achieve'
+---
+
+## Overview
+
+A `Goal` defines WHAT the agent should achieve, not HOW. Goals are:
+- **Declarative**: Define success criteria, not implementation
+- **Measurable**: Success criteria are checkable
+- **Constrained**: Boundaries the agent must respect
+- **Versionable**: Can evolve based on runtime feedback
+
+The agent graph (nodes and edges) is derived from the goal.
+
+## Class: Goal
+
+```python
+from framework.graph import Goal, SuccessCriterion, Constraint
+
+goal = Goal(
+    id="calc-001",
+    name="Calculator",
+    description="Perform mathematical calculations accurately",
+    success_criteria=[
+        SuccessCriterion(
+            id="accuracy",
+            description="Result matches expected answer",
+            metric="output_equals",
+            target="expected_result",
+            weight=1.0
+        )
+    ],
+    constraints=[
+        Constraint(
+            id="no-crash",
+            description="Handle invalid inputs gracefully",
+            constraint_type="hard",
+            category="safety"
+        )
+    ]
+)
+```
+
+### Required Fields
+
+<ParamField path="id" type="str" required>
+  Unique identifier for the goal
+</ParamField>
+
+<ParamField path="name" type="str" required>
+  Short, human-readable name
+</ParamField>
+
+<ParamField path="description" type="str" required>
+  Detailed description of what should be achieved
+</ParamField>
+
+### Lifecycle
+
+<ParamField path="status" type="GoalStatus" default="GoalStatus.DRAFT">
+  Current status:
+  - `DRAFT`: Being defined
+  - `READY`: Ready for agent creation
+  - `ACTIVE`: Has an agent graph, can execute
+  - `COMPLETED`: Achieved
+  - `FAILED`: Could not be achieved
+  - `SUSPENDED`: Paused for revision
+</ParamField>
+
+### Success Definition
+
+<ParamField path="success_criteria" type="list[SuccessCriterion]" default="[]">
+  List of measurable conditions that define success
+</ParamField>
+
+### Boundaries
+
+<ParamField path="constraints" type="list[Constraint]" default="[]">
+  Boundaries the agent must respect
+</ParamField>
+
+### Context
+
+<ParamField path="context" type="dict[str, Any]" default="{}">
+  Additional context: domain knowledge, user preferences, etc.
+</ParamField>
+
+<ParamField path="required_capabilities" type="list[str]" default="[]">
+  What the agent needs: 'llm', 'web_search', 'code_execution', etc.
+</ParamField>
+
+### Schema
+
+<ParamField path="input_schema" type="dict[str, Any]" default="{}">
+  Expected input format (JSON Schema)
+</ParamField>
+
+<ParamField path="output_schema" type="dict[str, Any]" default="{}">
+  Expected output format (JSON Schema)
+</ParamField>
+
+### Versioning
+
+<ParamField path="version" type="str" default="'1.0.0'">
+  Semantic version
+</ParamField>
+
+<ParamField path="parent_version" type="str | None" default="None">
+  Parent version if this is an evolution
+</ParamField>
+
+<ParamField path="evolution_reason" type="str | None" default="None">
+  Why this version was created
+</ParamField>
+
+### Timestamps
+
+<ParamField path="created_at" type="datetime">
+  When the goal was created
+</ParamField>
+
+<ParamField path="updated_at" type="datetime">
+  Last update time
+</ParamField>
+
+---
+
+## Class: SuccessCriterion
+
+A measurable condition that defines success.
+
+```python
+SuccessCriterion(
+    id="accuracy",
+    description="Result matches expected mathematical answer",
+    metric="output_equals",
+    target="expected_result",
+    weight=1.0
+)
+```
+
+Each criterion should be:
+- **Specific**: Clear what it means
+- **Measurable**: Can be evaluated programmatically or by LLM
+- **Achievable**: Within the agent's capabilities
+
+### Fields
+
+<ParamField path="id" type="str" required>
+  Unique identifier
+</ParamField>
+
+<ParamField path="description" type="str" required>
+  Human-readable description of what success looks like
+</ParamField>
+
+<ParamField path="metric" type="str" required>
+  How to measure: 'output_contains', 'output_equals', 'llm_judge', 'custom'
+</ParamField>
+
+<ParamField path="type" type="str" default="'success_rate'">
+  Runtime evaluation type, e.g. 'success_rate'
+</ParamField>
+
+<ParamField path="target" type="Any" required>
+  The target value or condition
+</ParamField>
+
+<ParamField path="weight" type="float" default="1.0">
+  Relative importance (0-1)
+</ParamField>
+
+<ParamField path="met" type="bool" default="False">
+  Whether this criterion has been met
+</ParamField>
+
+---
+
+## Class: Constraint
+
+A boundary the agent must respect.
+
+```python
+Constraint(
+    id="no-spam",
+    description="Never send more than 5 emails per hour",
+    constraint_type="hard",
+    category="safety",
+    check="email_count <= 5"
+)
+```
+
+Constraints are either:
+- **Hard**: Violation means failure
+- **Soft**: Violation is discouraged but allowed
+
+### Fields
+
+<ParamField path="id" type="str" required>
+  Unique identifier
+</ParamField>
+
+<ParamField path="description" type="str" required>
+  What the constraint is
+</ParamField>
+
+<ParamField path="constraint_type" type="str" required>
+  Type: 'hard' (must not violate) or 'soft' (prefer not to violate)
+</ParamField>
+
+<ParamField path="category" type="str" default="'general'">
+  Category: 'time', 'cost', 'safety', 'scope', 'quality'
+</ParamField>
+
+<ParamField path="check" type="str" default="''">
+  How to check: expression, function name, or 'llm_judge'
+</ParamField>
+
+---
+
+## Methods
+
+### is_success()
+
+Check if all weighted success criteria are met.
+
+```python
+if goal.is_success():
+    print("Goal achieved!")
+```
+
+<ResponseField name="is_success" type="bool">
+  True if at least 90% of weighted criteria are met
+</ResponseField>
+
+---
+
+### check_constraint()
+
+Check if a specific constraint is satisfied.
+
+```python
+satisfied = goal.check_constraint("no-spam", email_count)
+```
+
+<ParamField path="constraint_id" type="str" required>
+  The constraint ID to check
+</ParamField>
+
+<ParamField path="value" type="Any" required>
+  Value to check against
+</ParamField>
+
+<ResponseField name="satisfied" type="bool">
+  True if constraint is satisfied
+</ResponseField>
+
+---
+
+### to_prompt_context()
+
+Generate context string for LLM prompts.
+
+```python
+prompt_context = goal.to_prompt_context()
+print(prompt_context)
+```
+
+<ResponseField name="context" type="str">
+  Formatted goal context for LLM system prompts
+</ResponseField>
+
+Returns empty string for stub goals (no criteria, constraints, or context).
+
+---
+
+## Examples
+
+### Calculator Agent
+
+```python
+goal = Goal(
+    id="calc-001",
+    name="Calculator",
+    description="Perform mathematical calculations accurately",
+    success_criteria=[
+        SuccessCriterion(
+            id="accuracy",
+            description="Result matches expected mathematical answer",
+            metric="output_equals",
+            target="expected_result",
+            weight=1.0
+        )
+    ],
+    constraints=[
+        Constraint(
+            id="no-crash",
+            description="Handle invalid inputs gracefully, return 'Error'",
+            constraint_type="hard",
+            category="safety",
+            check="output != exception"
+        )
+    ],
+    required_capabilities=["llm"],
+    input_schema={
+        "type": "object",
+        "properties": {
+            "expression": {"type": "string"}
+        },
+        "required": ["expression"]
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "result": {"type": "number"}
+        }
+    }
+)
+```
+
+### Sales Lead Qualifier
+
+```python
+goal = Goal(
+    id="qualify-leads-001",
+    name="Sales Lead Qualifier",
+    description="Qualify incoming sales leads based on budget, timeline, and fit",
+    success_criteria=[
+        SuccessCriterion(
+            id="qualification-accuracy",
+            description="Correctly identify qualified vs unqualified leads",
+            metric="llm_judge",
+            target=0.9,  # 90% accuracy
+            weight=1.0
+        ),
+        SuccessCriterion(
+            id="response-time",
+            description="Qualify leads within 5 minutes",
+            metric="custom",
+            target=300,  # seconds
+            weight=0.5
+        )
+    ],
+    constraints=[
+        Constraint(
+            id="budget-threshold",
+            description="Only qualify leads with >$10k budget",
+            constraint_type="hard",
+            category="scope",
+            check="budget >= 10000"
+        ),
+        Constraint(
+            id="no-spam",
+            description="Don't contact leads more than once",
+            constraint_type="hard",
+            category="safety"
+        ),
+        Constraint(
+            id="professional-tone",
+            description="Maintain professional communication",
+            constraint_type="soft",
+            category="quality",
+            check="llm_judge"
+        )
+    ],
+    context={
+        "industry": "B2B SaaS",
+        "target_segment": "Mid-market enterprises",
+        "min_budget": 10000,
+        "qualifying_questions": [
+            "What's your budget?",
+            "What's your timeline?",
+            "Who's the decision maker?"
+        ]
+    },
+    required_capabilities=["llm", "web_search", "crm_integration"],
+    input_schema={
+        "type": "object",
+        "properties": {
+            "lead_name": {"type": "string"},
+            "company": {"type": "string"},
+            "email": {"type": "string"},
+            "initial_message": {"type": "string"}
+        },
+        "required": ["lead_name", "company", "email"]
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "qualified": {"type": "boolean"},
+            "budget": {"type": "number"},
+            "timeline": {"type": "string"},
+            "next_steps": {"type": "string"}
+        }
+    },
+    version="1.0.0"
+)
+```
+
+### Goal Evolution
+
+```python
+# Original goal
+goal_v1 = Goal(
+    id="email-sender-001",
+    name="Email Sender",
+    description="Send marketing emails",
+    version="1.0.0"
+)
+
+# Evolved goal after feedback
+goal_v2 = Goal(
+    id="email-sender-001",
+    name="Email Sender",
+    description="Send personalized marketing emails with A/B testing",
+    success_criteria=[
+        SuccessCriterion(
+            id="open-rate",
+            description="Email open rate > 25%",
+            metric="custom",
+            target=0.25,
+            weight=0.7
+        ),
+        SuccessCriterion(
+            id="personalization",
+            description="All emails include recipient name and company",
+            metric="llm_judge",
+            target=True,
+            weight=0.3
+        )
+    ],
+    version="2.0.0",
+    parent_version="1.0.0",
+    evolution_reason="Added personalization and A/B testing based on low engagement"
+)
+```

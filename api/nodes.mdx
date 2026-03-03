@@ -1,0 +1,421 @@
+---
+title: 'Node API'
+description: 'Node specifications and protocols'
+---
+
+## Overview
+
+Nodes are the building blocks of agent graphs. Each node performs a unit of work, makes decisions, and produces results.
+
+## Class: NodeSpec
+
+Declarative specification for a node.
+
+```python
+from framework.graph import NodeSpec
+
+node = NodeSpec(
+    id="calculator",
+    name="Calculator Node",
+    description="Performs mathematical calculations",
+    node_type="event_loop",
+    input_keys=["expression"],
+    output_keys=["result"],
+    tools=["calculate"],
+    system_prompt="You are a calculator..."
+)
+```
+
+### Required Fields
+
+<ParamField path="id" type="str" required>
+  Unique identifier for the node
+</ParamField>
+
+<ParamField path="name" type="str" required>
+  Human-readable name
+</ParamField>
+
+<ParamField path="description" type="str" required>
+  What this node does
+</ParamField>
+
+### Node Type
+
+<ParamField path="node_type" type="str" default="'event_loop'">
+  Type of node:
+  - `event_loop` (recommended): LLM with tool-calling loop
+  - `gcu`: Browser automation (subagents only)
+</ParamField>
+
+### Data Flow
+
+<ParamField path="input_keys" type="list[str]" default="[]">
+  Keys this node reads from shared memory or input
+</ParamField>
+
+<ParamField path="output_keys" type="list[str]" default="[]">
+  Keys this node writes to shared memory or output
+</ParamField>
+
+<ParamField path="nullable_output_keys" type="list[str]" default="[]">
+  Output keys that can be None without triggering validation errors
+</ParamField>
+
+<ParamField path="input_schema" type="dict[str, dict]" default="{}">
+  Optional schema for input validation. Format:
+  ```python
+  {"key": {"type": "string", "required": True, "description": "..."}}
+  ```
+</ParamField>
+
+<ParamField path="output_schema" type="dict[str, dict]" default="{}">
+  Optional schema for output validation
+</ParamField>
+
+### LLM Configuration
+
+<ParamField path="system_prompt" type="str | None" default="None">
+  System prompt for LLM nodes
+</ParamField>
+
+<ParamField path="tools" type="list[str]" default="[]">
+  Tool names this node can use
+</ParamField>
+
+<ParamField path="model" type="str | None" default="None">
+  Specific model to use (defaults to graph default)
+</ParamField>
+
+### Subagent Delegation
+
+<ParamField path="sub_agents" type="list[str]" default="[]">
+  Node IDs that can be invoked as subagents from this node
+</ParamField>
+
+### Routing
+
+<ParamField path="routes" type="dict[str, str]" default="{}">
+  Condition -> target_node_id mapping for router nodes
+</ParamField>
+
+### Retry Behavior
+
+<ParamField path="max_retries" type="int" default="3">
+  Maximum retries on failure
+</ParamField>
+
+<ParamField path="retry_on" type="list[str]" default="[]">
+  Error types to retry on
+</ParamField>
+
+<ParamField path="max_node_visits" type="int" default="0">
+  Max times this node executes in one run. 0 = unlimited (default, for forever-alive agents). Set >1 for one-shot agents with feedback loops.
+</ParamField>
+
+### Output Validation
+
+<ParamField path="output_model" type="type[BaseModel] | None" default="None">
+  Optional Pydantic model class for validating LLM output
+</ParamField>
+
+<ParamField path="max_validation_retries" type="int" default="2">
+  Maximum retries when Pydantic validation fails
+</ParamField>
+
+### Client Interaction
+
+<ParamField path="client_facing" type="bool" default="False">
+  If True, this node streams output to the end user and can request input
+</ParamField>
+
+<ParamField path="success_criteria" type="str | None" default="None">
+  Natural-language criteria for phase completion (enables Level 2 conversation-aware judge)
+</ParamField>
+
+---
+
+## Class: NodeContext
+
+Everything a node needs to execute.
+
+```python
+from framework.graph import NodeContext
+
+# Passed to node.execute()
+ctx = NodeContext(
+    runtime=runtime,
+    node_id="calculator",
+    node_spec=node_spec,
+    memory=shared_memory,
+    input_data={"expression": "2 + 3"},
+    llm=llm_provider,
+    available_tools=tools,
+)
+```
+
+### Fields
+
+<ResponseField name="runtime" type="Runtime">
+  Runtime for decision logging
+</ResponseField>
+
+<ResponseField name="node_id" type="str">
+  Node identity
+</ResponseField>
+
+<ResponseField name="node_spec" type="NodeSpec">
+  Node specification
+</ResponseField>
+
+<ResponseField name="memory" type="SharedMemory">
+  Shared state between nodes
+</ResponseField>
+
+<ResponseField name="input_data" type="dict[str, Any]">
+  Input data for this execution
+</ResponseField>
+
+<ResponseField name="llm" type="LLMProvider | None">
+  LLM provider (if applicable)
+</ResponseField>
+
+<ResponseField name="available_tools" type="list[Tool]">
+  Tools this node can use
+</ResponseField>
+
+<ResponseField name="goal_context" type="str">
+  Goal context for guidance
+</ResponseField>
+
+<ResponseField name="max_tokens" type="int">
+  Maximum tokens for LLM responses (default: 4096)
+</ResponseField>
+
+<ResponseField name="attempt" type="int">
+  Current attempt number (for retries)
+</ResponseField>
+
+<ResponseField name="max_attempts" type="int">
+  Maximum attempts allowed
+</ResponseField>
+
+---
+
+## Class: NodeResult
+
+The output of a node execution.
+
+```python
+from framework.graph import NodeResult
+
+result = NodeResult(
+    success=True,
+    output={"result": 5},
+    tokens_used=150,
+    latency_ms=420
+)
+```
+
+### Fields
+
+<ParamField path="success" type="bool" required>
+  Whether the node succeeded
+</ParamField>
+
+<ParamField path="output" type="dict[str, Any]" default="{}">
+  Output data
+</ParamField>
+
+<ParamField path="error" type="str | None" default="None">
+  Error message if failed
+</ParamField>
+
+<ParamField path="next_node" type="str | None" default="None">
+  For routing decisions: which node to execute next
+</ParamField>
+
+<ParamField path="route_reason" type="str | None" default="None">
+  Reason for routing decision
+</ParamField>
+
+<ParamField path="tokens_used" type="int" default="0">
+  LLM tokens consumed
+</ParamField>
+
+<ParamField path="latency_ms" type="int" default="0">
+  Execution time in milliseconds
+</ParamField>
+
+<ParamField path="validation_errors" type="list[str]" default="[]">
+  Pydantic validation errors (if any)
+</ParamField>
+
+---
+
+## Protocol: NodeProtocol
+
+Interface all nodes must implement.
+
+```python
+from framework.graph import NodeProtocol, NodeContext, NodeResult
+
+class CalculatorNode(NodeProtocol):
+    async def execute(self, ctx: NodeContext) -> NodeResult:
+        # Get input
+        expression = ctx.input_data.get("expression")
+        
+        # Record decision
+        decision_id = ctx.runtime.decide(
+            intent="Calculate expression",
+            options=[
+                {"id": "eval", "description": "Evaluate expression"}
+            ],
+            chosen="eval",
+            reasoning="Standard evaluation"
+        )
+        
+        # Do the work
+        try:
+            result = eval(expression)
+            
+            # Record outcome
+            ctx.runtime.record_outcome(
+                decision_id=decision_id,
+                success=True,
+                result=result
+            )
+            
+            return NodeResult(
+                success=True,
+                output={"result": result}
+            )
+        except Exception as e:
+            ctx.runtime.record_outcome(
+                decision_id=decision_id,
+                success=False,
+                error=str(e)
+            )
+            return NodeResult(
+                success=False,
+                error=str(e)
+            )
+```
+
+### Required Method
+
+<ParamField path="execute" type="async (ctx: NodeContext) -> NodeResult" required>
+  Execute this node's logic
+</ParamField>
+
+### Optional Method
+
+<ParamField path="validate_input" type="(ctx: NodeContext) -> list[str]">
+  Validate that required inputs are present. Returns list of validation error messages (empty if valid).
+</ParamField>
+
+---
+
+## Class: SharedMemory
+
+Shared state between nodes in a graph execution.
+
+```python
+memory = SharedMemory()
+
+# Write data
+memory.write("result", 42)
+
+# Read data
+value = memory.read("result")
+
+# Read all
+all_data = memory.read_all()
+```
+
+### Methods
+
+<ParamField path="read" type="(key: str) -> Any">
+  Read a value from shared memory
+</ParamField>
+
+<ParamField path="write" type="(key: str, value: Any, validate: bool = True) -> None">
+  Write a value to shared memory. If validate=True, checks for suspicious content.
+</ParamField>
+
+<ParamField path="write_async" type="async (key: str, value: Any, validate: bool = True) -> None">
+  Thread-safe async write with per-key locking. Use for parallel execution.
+</ParamField>
+
+<ParamField path="read_all" type="() -> dict[str, Any]">
+  Read all accessible data
+</ParamField>
+
+<ParamField path="with_permissions" type="(read_keys: list[str], write_keys: list[str]) -> SharedMemory">
+  Create a view with restricted permissions for a specific node
+</ParamField>
+
+---
+
+## Example: Event Loop Node
+
+```python
+from framework.graph import NodeSpec
+
+node = NodeSpec(
+    id="email-sender",
+    name="Email Sender",
+    description="Send emails to leads",
+    node_type="event_loop",
+    input_keys=["lead_email", "message"],
+    output_keys=["sent", "response"],
+    tools=["send_email", "validate_email"],
+    system_prompt="""
+        You are an email sending agent.
+        - Validate email addresses before sending
+        - Use professional tone
+        - Track delivery status
+    """,
+    max_retries=3,
+    retry_on=["network_error", "rate_limit"],
+)
+```
+
+---
+
+## Example: Router Node
+
+```python
+node = NodeSpec(
+    id="lead-router",
+    name="Lead Router",
+    description="Route leads based on priority",
+    node_type="event_loop",
+    input_keys=["lead_priority"],
+    output_keys=["route_decision"],
+    routes={
+        "high_priority": "sales-team",
+        "medium_priority": "queue",
+        "low_priority": "nurture",
+    },
+)
+```
+
+---
+
+## Example: Client-Facing Node
+
+```python
+node = NodeSpec(
+    id="chat-handler",
+    name="Chat Handler",
+    description="Handle user chat interactions",
+    node_type="event_loop",
+    input_keys=["user_message"],
+    output_keys=["response"],
+    tools=["search_kb", "create_ticket"],
+    system_prompt="You are a helpful support agent.",
+    client_facing=True,  # Streams to user
+    success_criteria="User's question is fully answered",
+)
+```

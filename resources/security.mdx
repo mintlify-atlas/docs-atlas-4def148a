@@ -1,0 +1,391 @@
+---
+title: Security Policy
+description: Security guidelines and vulnerability reporting for Hive
+---
+
+## Supported Versions
+
+We release security updates for the following versions:
+
+| Version | Supported          |
+| ------- | ------------------ |
+| 0.x.x   | ✅ |
+
+<Info>
+Hive is currently in active development (0.x versions). We take security seriously and encourage responsible disclosure of any vulnerabilities.
+</Info>
+
+## Reporting a Vulnerability
+
+We take security vulnerabilities seriously. If you discover a security issue, please report it responsibly.
+
+### How to Report
+
+<Warning>
+**Please do NOT report security vulnerabilities through public GitHub issues.**
+</Warning>
+
+Instead, please send an email to **contact@adenhq.com** with:
+
+1. **A description of the vulnerability**
+   - Include the type of vulnerability (e.g., injection, authentication bypass, data exposure)
+   - Specify which component is affected (core, tools, specific agent, etc.)
+
+2. **Steps to reproduce the issue**
+   - Provide a clear, step-by-step guide to reproduce the vulnerability
+   - Include any relevant code snippets, configurations, or payloads
+   - Specify the environment (OS, Python version, Hive version)
+
+3. **Potential impact of the vulnerability**
+   - Explain what an attacker could achieve
+   - Assess severity (critical, high, medium, low)
+   - Identify any data or systems at risk
+
+4. **Any possible mitigations you've identified**
+   - Suggest temporary workarounds if available
+   - Propose potential fixes if you have ideas
+
+### What to Expect
+
+<Steps>
+  <Step title="Acknowledgment">
+    We will acknowledge receipt of your report within **48 hours**.
+  </Step>
+  
+  <Step title="Communication">
+    We will keep you informed of our progress as we investigate and develop a fix.
+  </Step>
+  
+  <Step title="Resolution">
+    We aim to resolve critical vulnerabilities within **7 days**.
+  </Step>
+  
+  <Step title="Credit">
+    We will credit you in our security advisories (unless you prefer to remain anonymous).
+  </Step>
+</Steps>
+
+### Safe Harbor
+
+We consider security research conducted in accordance with this policy to be:
+
+- **Authorized** concerning any applicable anti-hacking laws
+- **Authorized** concerning any relevant anti-circumvention laws
+- **Exempt** from restrictions in our Terms of Service that would interfere with conducting security research
+
+<Tip>
+We value the security community's efforts and will work with you to understand and resolve issues quickly.
+</Tip>
+
+## Security Best Practices for Users
+
+### 1. Keep Updated
+
+Always run the latest version of Hive to benefit from security patches and improvements.
+
+```bash
+# Update Hive
+git pull origin main
+uv sync
+```
+
+### 2. Secure Configuration
+
+Review `~/.hive/configuration.json` settings, especially in production:
+
+```json
+{
+  "default_model": "claude-sonnet-4.5",
+  "use_claude_code_subscription": false,
+  "max_concurrent_executions": 5
+}
+```
+
+<Warning>
+- Never commit `configuration.json` with sensitive values
+- Use environment-specific configurations
+- Restrict file permissions: `chmod 600 ~/.hive/configuration.json`
+</Warning>
+
+### 3. Environment Variables
+
+**Never commit sensitive files:**
+
+<CodeGroup>
+```bash .gitignore
+# Add to .gitignore
+.env
+config.yaml
+*.credentials
+~/.hive/credentials
+```
+
+```bash Environment Variables
+# Use environment variables for secrets
+export ANTHROPIC_API_KEY="sk-ant-..."
+export OPENAI_API_KEY="sk-..."
+export GOOGLE_MAPS_API_KEY="AIza..."
+
+# Or use the encrypted credential store
+hive setup-credentials
+```
+</CodeGroup>
+
+### 4. Credential Store Security
+
+Hive includes an encrypted credential store at `~/.hive/credentials`:
+
+- **Encrypted at rest** using cryptography library
+- **Automatic encryption** for all stored credentials
+- **TTL-based caching** (default 5 minutes)
+- **Thread-safe operations**
+
+<Tip>
+Use the credential store for API keys instead of environment variables in production:
+
+```bash
+hive setup-credentials
+```
+</Tip>
+
+#### Credential Storage Backends
+
+Hive supports multiple storage backends:
+
+<CardGroup cols={2}>
+  <Card title="EncryptedFileStorage" icon="file-lock">
+    **Default:** Encrypted local storage at `~/.hive/credentials`
+    
+    - Best for: Local development
+    - Security: Encrypted with local key
+  </Card>
+  
+  <Card title="EnvVarStorage" icon="terminal">
+    Environment variable mapping
+    
+    - Best for: CI/CD pipelines
+    - Security: Depends on environment security
+  </Card>
+  
+  <Card title="HashiCorp Vault" icon="vault">
+    Enterprise secrets management
+    
+    - Best for: Production deployments
+    - Security: Enterprise-grade
+  </Card>
+  
+  <Card title="InMemoryStorage" icon="memory">
+    In-memory only (testing)
+    
+    - Best for: Unit tests
+    - Security: Not persistent
+  </Card>
+</CardGroup>
+
+### 5. Network Security
+
+<Tabs>
+  <Tab title="Production">
+    - ✅ Use HTTPS for all external communications
+    - ✅ Configure firewalls to restrict access
+    - ✅ Use VPCs or private networks
+    - ✅ Enable webhook secrets for authentication
+    - ✅ Implement rate limiting
+  </Tab>
+  
+  <Tab title="Development">
+    - ⚠️ HTTP acceptable for localhost only
+    - ⚠️ Ensure dev environments are isolated
+    - ⚠️ Use separate API keys for dev/staging/prod
+  </Tab>
+</Tabs>
+
+### 6. Database Security
+
+If using database integrations (Postgres, BigQuery, etc.):
+
+- Use **strong passwords** (16+ characters, mixed case, numbers, symbols)
+- **Limit network access** to specific IPs or VPCs
+- Use **read-only credentials** when possible
+- Enable **audit logging** for sensitive operations
+- Regularly **rotate credentials**
+
+### 7. Agent-Specific Security
+
+#### Input Validation
+
+<CodeGroup>
+```python Goal Constraints
+# Define hard constraints for safety
+Goal(
+    constraints=[
+        Constraint(
+            description="Never access production database",
+            type=ConstraintType.HARD,
+            category="safety",
+        ),
+        Constraint(
+            description="Only process emails from allowed domains",
+            type=ConstraintType.HARD,
+            category="scope",
+        ),
+    ]
+)
+```
+
+```python Node Validation
+# Validate inputs in nodes
+def validate_input(state):
+    email = state.get("email")
+    if not email or "@" not in email:
+        raise ValueError("Invalid email address")
+    
+    # Check against allowed domains
+    allowed_domains = ["company.com", "trusted.com"]
+    domain = email.split("@")[1]
+    if domain not in allowed_domains:
+        raise ValueError(f"Domain {domain} not allowed")
+```
+</CodeGroup>
+
+#### Rate Limiting & Cost Controls
+
+```python
+RuntimeConfig(
+    max_concurrent_executions=5,  # Limit concurrent agents
+    # Add cost tracking (roadmap item)
+)
+```
+
+#### Human-in-the-Loop (HITL) for Sensitive Operations
+
+```python
+# Require human approval for sensitive actions
+NodeSpec(
+    id="sensitive-action",
+    system_prompt="""
+    You are about to perform a sensitive operation.
+    Request human approval before proceeding.
+    """,
+    # Agent will pause and wait for human input
+)
+```
+
+## Security Features
+
+Hive includes built-in security features:
+
+<AccordionGroup>
+  <Accordion title="Environment-Based Configuration" icon="gear" defaultOpen>
+    No hardcoded secrets in code. All sensitive values loaded from:
+    - Environment variables
+    - Encrypted credential store
+    - HashiCorp Vault (enterprise)
+  </Accordion>
+
+  <Accordion title="Input Validation" icon="shield-check">
+    - Pydantic-based validation on all inputs
+    - Schema enforcement for API endpoints
+    - Type checking at runtime
+  </Accordion>
+
+  <Accordion title="Secure Session Handling" icon="key">
+    - Session isolation prevents data bleed
+    - Thread-safe state management
+    - Automatic session cleanup
+  </Accordion>
+
+  <Accordion title="CORS Configuration" icon="globe">
+    - Configurable CORS for webhook server
+    - Origin validation
+    - Method restrictions
+  </Accordion>
+
+  <Accordion title="Rate Limiting" icon="gauge">
+    - Configurable rate limits
+    - Automatic retry with backoff
+    - Tool-level rate limiting (many tools handle this automatically)
+  </Accordion>
+
+  <Accordion title="OAuth2 Security" icon="lock">
+    - Secure token storage
+    - Automatic token refresh
+    - Revocation support
+  </Accordion>
+</AccordionGroup>
+
+## Known Security Considerations
+
+<Warning>
+### Prompt Injection
+
+LLM-based agents are potentially vulnerable to prompt injection attacks. Mitigate by:
+
+- **Validating all user inputs** before passing to LLM
+- **Using goal constraints** to limit agent behavior
+- **Implementing HITL nodes** for sensitive operations
+- **Sandboxing agent execution** (especially for code execution tools)
+</Warning>
+
+<Warning>
+### Tool Access Control
+
+Agents have access to all tools defined in their MCP server configuration. Ensure:
+
+- **Principle of least privilege:** Only give agents tools they need
+- **Separate tool sets** for different agent types
+- **Review tool permissions** regularly
+</Warning>
+
+<Warning>
+### Credential Exposure in Logs
+
+Be cautious of credentials appearing in logs:
+
+- **Never log full API keys** (use masking: `sk-ant-****...****`)
+- **Review log levels** before enabling DEBUG
+- **Restrict log file access** (permissions, location)
+- **Rotate credentials** if exposed
+</Warning>
+
+## Security Roadmap
+
+Upcoming security features:
+
+- ⏳ **Audit logging** - Compliance and tracking
+- ⏳ **AWS Secrets Manager integration**
+- ⏳ **Azure Key Vault integration**
+- ⏳ **Per-environment configuration** support
+- ⏳ **Enhanced guardrails SDK** - Deterministic safety rules
+- ⏳ **Token usage tracking** - Cost and quota monitoring
+
+## Security Resources
+
+<CardGroup cols={2}>
+  <Card title="OWASP LLM Top 10" icon="list" href="https://owasp.org/www-project-top-10-for-large-language-model-applications/">
+    Security risks for LLM applications
+  </Card>
+  
+  <Card title="MCP Security" icon="plug" href="https://modelcontextprotocol.io/docs/security">
+    Model Context Protocol security best practices
+  </Card>
+  
+  <Card title="Python Security" icon="python" href="https://python.readthedocs.io/en/latest/library/security_warnings.html">
+    Python security considerations
+  </Card>
+  
+  <Card title="Docker Security" icon="docker" href="https://docs.docker.com/engine/security/">
+    Docker security best practices
+  </Card>
+</CardGroup>
+
+## Questions?
+
+For security-related questions that don't involve active vulnerabilities:
+
+- **Discord:** [Join our community](https://discord.com/invite/MXE49hrKDk)
+- **Email:** contact@adenhq.com
+
+<Info>
+For **active vulnerabilities**, please email contact@adenhq.com directly. Do not post in public channels.
+</Info>

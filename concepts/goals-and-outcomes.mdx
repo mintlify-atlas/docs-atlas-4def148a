@@ -1,0 +1,258 @@
+---
+title: Goals and outcomes
+description: Define what your agent should achieve with structured success criteria and constraints
+---
+
+Business processes are outcome-driven. A sales team doesn't follow a rigid script — they adapt their approach until the deal closes. A support agent doesn't execute a flowchart — they resolve the customer's issue. The outcome is what matters, not the specific steps taken to get there.
+
+Hive is built on this principle. Instead of hardcoding agent workflows step by step, you define the outcome you want, and the framework figures out how to get there. We call this **Outcome-Driven Development (ODD)**.
+
+## Task-driven vs goal-driven vs outcome-driven
+
+These three paradigms represent different levels of abstraction for building agents:
+
+### Task-driven development
+
+Asks: *"Is the code correct?"*
+
+You define explicit steps. The agent follows them. Success means the steps ran without errors. The problem: an agent can execute every step perfectly and still produce a useless result. The steps become the goal, not the actual outcome.
+
+### Goal-driven development
+
+Asks: *"Are we solving the right problem?"*
+
+You define what you want to achieve. The agent plans and executes toward that goal. Better than task-driven because it captures intent. But goals can be vague — "improve customer satisfaction" doesn't tell you when you're done.
+
+### Outcome-driven development
+
+Asks: *"Did the system produce the desired result?"*
+
+You define measurable success criteria, hard constraints, and the context the agent needs. The agent is evaluated against the actual outcome, not whether it followed the right steps or aimed at the right goal. This is what Hive implements.
+
+## Goals as first-class citizens
+
+In Hive, a `Goal` is not a string description. It's a structured object with three components:
+
+### Success criteria
+
+Each goal has weighted success criteria that define what "done" looks like. These aren't binary pass/fail checks — they're multi-dimensional measures of quality.
+
+```python
+from framework.graph import Goal, SuccessCriterion
+
+goal = Goal(
+    id="deep-research",
+    name="Deep Research Report",
+    description="Research any topic and produce a cited report",
+    success_criteria=[
+        SuccessCriterion(
+            id="source-diversity",
+            description="Use multiple diverse, authoritative sources",
+            metric="source_count",
+            target=">=5",
+            weight=0.25,
+        ),
+        SuccessCriterion(
+            id="citation-coverage",
+            description="Every factual claim in the report cites its source",
+            metric="citation_coverage",
+            target="100%",
+            weight=0.25,
+        ),
+        SuccessCriterion(
+            id="user-satisfaction",
+            description="User reviews findings before report generation",
+            metric="user_approval",
+            target="true",
+            weight=0.25,
+        ),
+    ],
+)
+```
+
+Metrics can be `output_contains`, `output_equals`, `llm_judge`, or `custom`. Weights let you express what matters most — a perfectly compliant message that isn't personalized still falls short.
+
+### Constraints
+
+Constraints define what must **not** happen. They're the guardrails.
+
+```python
+from framework.graph import Constraint
+
+goal = Goal(
+    id="sales-outreach",
+    name="Personalized Sales Outreach",
+    constraints=[
+        Constraint(
+            id="no_spam",
+            description="Never send more than 3 messages to the same person per week",
+            constraint_type="hard",    # Violation = immediate escalation
+            category="safety"
+        ),
+        Constraint(
+            id="budget_limit",
+            description="Total LLM cost must not exceed $5 per run",
+            constraint_type="soft",    # Violation = warning, not a hard stop
+            category="cost"
+        ),
+    ],
+)
+```
+
+Hard constraints are non-negotiable — violating one triggers escalation or failure. Soft constraints are preferences that the agent should respect but can bend when necessary. Constraint categories include `time`, `cost`, `safety`, `scope`, and `quality`.
+
+### Context
+
+Goals carry context — domain knowledge, preferences, background information that the agent needs to make good decisions. This context is injected into every LLM call the agent makes, so the agent is always reasoning with the full picture.
+
+```python
+goal = Goal(
+    id="customer-support",
+    name="Customer Support Triage",
+    context={
+        "tone": "professional and empathetic",
+        "response_time_sla": "4 hours",
+        "escalation_threshold": "frustration or legal mention",
+        "company_policies": "...",
+    },
+)
+```
+
+## Why this matters
+
+When you define goals with weighted criteria and constraints, three things happen:
+
+### The agent can self-correct
+
+Goals are injected into every LLM call, so the agent is always reasoning against its success criteria. Within a [graph execution](/concepts/agent-graphs), nodes use these criteria to decide whether to accept their output, retry, or escalate — self-correction in real time.
+
+```python core/framework/graph/goal.py
+def to_prompt_context(self) -> str:
+    """Generate context string for LLM prompts."""
+    lines = [
+        f"# Goal: {self.name}",
+        f"{self.description}",
+        "",
+        "## Success Criteria:",
+    ]
+
+    for sc in self.success_criteria:
+        lines.append(f"- {sc.description}")
+
+    if self.constraints:
+        lines.append("")
+        lines.append("## Constraints:")
+        for c in self.constraints:
+            severity = "MUST" if c.constraint_type == "hard" else "SHOULD"
+            lines.append(f"- [{severity}] {c.description}")
+
+    return "\n".join(lines)
+```
+
+### Evolution has a target
+
+When an agent fails, the framework knows *which criteria* it fell short on, which gives the coding agent specific information to improve the next generation (see [Evolution](/concepts/evolution)).
+
+### Humans stay in control
+
+Constraints define the boundaries. The agent has freedom to find creative solutions within those boundaries, but it can't cross the lines you've drawn.
+
+## Goal lifecycle
+
+The goal lifecycle flows through these states:
+
+<Note>
+`DRAFT` → `READY` → `ACTIVE` → `COMPLETED` / `FAILED` / `SUSPENDED`
+</Note>
+
+```python core/framework/graph/goal.py
+class GoalStatus(StrEnum):
+    """Lifecycle status of a goal."""
+    DRAFT = "draft"          # Being defined
+    READY = "ready"          # Ready for agent creation
+    ACTIVE = "active"        # Has an agent graph, can execute
+    COMPLETED = "completed"  # Achieved
+    FAILED = "failed"        # Could not be achieved
+    SUSPENDED = "suspended"  # Paused for revision
+```
+
+This gives you visibility into where each objective stands at any point during execution.
+
+## Checking success
+
+The framework evaluates whether a goal is met based on weighted criteria:
+
+```python core/framework/graph/goal.py
+def is_success(self) -> bool:
+    """Check if all weighted success criteria are met."""
+    if not self.success_criteria:
+        return False
+
+    total_weight = sum(c.weight for c in self.success_criteria)
+    met_weight = sum(c.weight for c in self.success_criteria if c.met)
+
+    return met_weight >= total_weight * 0.9  # 90% threshold
+```
+
+A goal succeeds when 90% of the weighted criteria are satisfied. This allows for partial success and prioritizes what matters most through weights.
+
+## Real-world example
+
+Here's a complete goal from a production research agent:
+
+```python examples/templates/deep_research_agent/agent.py
+goal = Goal(
+    id="rigorous-interactive-research",
+    name="Rigorous Interactive Research",
+    description=(
+        "Research any topic by searching diverse sources, analyzing findings, "
+        "and producing a cited report — with user checkpoints to guide direction."
+    ),
+    success_criteria=[
+        SuccessCriterion(
+            id="source-diversity",
+            description="Use multiple diverse, authoritative sources",
+            metric="source_count",
+            target=">=5",
+            weight=0.25,
+        ),
+        SuccessCriterion(
+            id="citation-coverage",
+            description="Every factual claim in the report cites its source",
+            metric="citation_coverage",
+            target="100%",
+            weight=0.25,
+        ),
+        SuccessCriterion(
+            id="user-satisfaction",
+            description="User reviews findings before report generation",
+            metric="user_approval",
+            target="true",
+            weight=0.25,
+        ),
+        SuccessCriterion(
+            id="report-completeness",
+            description="Final report answers the original research questions",
+            metric="question_coverage",
+            target="90%",
+            weight=0.25,
+        ),
+    ],
+    constraints=[
+        Constraint(
+            id="no-hallucination",
+            description="Only include information found in fetched sources",
+            constraint_type="quality",
+            category="accuracy",
+        ),
+        Constraint(
+            id="source-attribution",
+            description="Every claim must cite its source with a numbered reference",
+            constraint_type="quality",
+            category="accuracy",
+        ),
+    ],
+)
+```
+
+This goal defines exactly what success looks like, with measurable criteria, clear constraints, and explicit weights that communicate priorities.

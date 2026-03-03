@@ -1,0 +1,432 @@
+---
+title: Node Configuration
+description: Configure nodes - the building blocks of agent graphs
+---
+
+# Node Configuration
+
+Nodes are the building blocks of agent graphs. Each node is a unit of work that receives context, makes decisions, and produces results.
+
+## Node Types
+
+Hive supports three node types:
+
+### Event Loop Node (Recommended)
+
+Multi-turn LLM streaming loop with tool execution:
+
+```python
+NodeSpec(
+    id="research",
+    name="Research Node",
+    description="Search and analyze information",
+    node_type="event_loop",
+    system_prompt="You are a research assistant.",
+    input_keys=["topic"],
+    output_keys=["findings"],
+    tools=["web_search", "fetch_url"],
+)
+```
+
+### GCU Node (Browser Automation)
+
+For browser-based tasks using the Graph Context Unit:
+
+```python
+NodeSpec(
+    id="web_scraper",
+    name="Web Scraper",
+    description="Extract data from websites",
+    node_type="gcu",
+    system_prompt="Navigate and extract data.",
+    input_keys=["url"],
+    output_keys=["data"],
+    # Browser tools auto-included from gcu-tools MCP
+)
+```
+
+### Router Node
+
+Conditional branching based on state:
+
+```python
+NodeSpec(
+    id="router",
+    name="Condition Router",
+    description="Route based on condition",
+    node_type="router",
+    input_keys=["status"],
+    routes={
+        "success": "next_node",
+        "failure": "error_handler",
+        "retry": "previous_node",
+    },
+)
+```
+
+## Core Parameters
+
+### Identity
+
+```python
+NodeSpec(
+    id="unique_node_id",        # Must be unique in graph
+    name="Human Readable Name",  # Display name
+    description="What this node does",  # Purpose
+)
+```
+
+### Data Flow
+
+Define what the node reads and writes:
+
+```python
+NodeSpec(
+    id="processor",
+    input_keys=["request", "context"],  # Reads from shared memory
+    output_keys=["response", "metadata"],  # Writes to shared memory
+    nullable_output_keys=["metadata"],  # Optional outputs
+)
+```
+
+<Note>
+`nullable_output_keys` allows outputs to remain unset without triggering validation errors. Useful for mutually exclusive outputs (e.g., `success_result` or `error_message`).
+</Note>
+
+### System Prompt
+
+For LLM nodes (event_loop, gcu), provide instructions:
+
+```python
+NodeSpec(
+    id="intake",
+    node_type="event_loop",
+    system_prompt="""
+You are a research intake specialist. Your job is to:
+1. Ask the user what they want to research
+2. Clarify their specific questions
+3. Set research_topic and research_questions outputs
+
+Be concise and professional.
+""",
+    output_keys=["research_topic", "research_questions"],
+)
+```
+
+## Tools
+
+Add external integrations to nodes:
+
+```python
+NodeSpec(
+    id="research",
+    node_type="event_loop",
+    tools=[
+        "web_search",      # Search the web
+        "fetch_url",       # Fetch webpage content
+        "save_data",       # Save to disk
+        "load_data",       # Load from disk
+    ],
+)
+```
+
+Tools are discovered from:
+1. MCP servers (defined in `mcp_servers.json`)
+2. Built-in framework tools
+3. Custom tools in `tools.py`
+
+<Note>
+See [Tools & Integrations](/building/tools-and-integrations) for tool configuration.
+</Note>
+
+## Client-Facing Nodes
+
+Nodes that interact with users:
+
+```python
+NodeSpec(
+    id="review",
+    node_type="event_loop",
+    client_facing=True,  # Enables user interaction
+    system_prompt="Present findings and ask for feedback.",
+)
+```
+
+When `client_facing=True`:
+- An `ask_user()` tool is automatically injected
+- Text-only turns (no tool calls) automatically block for user input
+- The node can request explicit input via `ask_user()`
+
+**Best Practice:** Set `client_facing=True` only for nodes that need user approval or input. Worker nodes doing autonomous work should be `False`.
+
+## Retry and Visit Limits
+
+### Max Retries
+
+Control retry behavior on errors:
+
+```python
+NodeSpec(
+    id="api_caller",
+    max_retries=3,
+    retry_on=["timeout", "rate_limit"],
+)
+```
+
+### Max Node Visits
+
+Limit how many times a node executes per graph run:
+
+```python
+NodeSpec(
+    id="refinement",
+    max_node_visits=5,  # Allow up to 5 visits (for feedback loops)
+)
+```
+
+Set to `0` for unlimited visits (default, required for forever-alive agents).
+
+## Validation and Schemas
+
+### Input Validation
+
+Define expected input structure:
+
+```python
+NodeSpec(
+    id="processor",
+    input_keys=["data", "config"],
+    input_schema={
+        "data": {
+            "type": "dict",
+            "required": True,
+            "description": "Input data to process",
+        },
+        "config": {
+            "type": "dict",
+            "required": False,
+            "description": "Optional configuration",
+        },
+    },
+)
+```
+
+### Output Validation with Pydantic
+
+Enforce structured output:
+
+```python
+from pydantic import BaseModel, Field
+
+class ResearchOutput(BaseModel):
+    topic: str = Field(description="Research topic")
+    questions: list[str] = Field(description="Research questions")
+    depth: str = Field(description="shallow or deep")
+
+NodeSpec(
+    id="intake",
+    node_type="event_loop",
+    output_keys=["research_data"],
+    output_model=ResearchOutput,  # Validates LLM output
+    max_validation_retries=2,  # Retry on validation failure
+)
+```
+
+## Real-World Example: Multi-Phase Agent
+
+Here's a complete node configuration from the framework:
+
+```python
+from framework.graph import NodeSpec
+
+# Intake node - gathers requirements
+intake_node = NodeSpec(
+    id="intake",
+    name="Research Intake",
+    description="Gather research requirements from user",
+    node_type="event_loop",
+    system_prompt="""
+You are a research intake specialist.
+
+STEP 1: Ask the user what they want to research.
+STEP 2: Clarify their specific questions and depth (shallow or deep).
+STEP 3: Call set_output with research_topic and research_questions.
+""",
+    input_keys=[],
+    output_keys=["research_topic", "research_questions"],
+    client_facing=True,
+)
+
+# Research node - autonomous worker
+research_node = NodeSpec(
+    id="research",
+    name="Research Executor",
+    description="Search and analyze sources",
+    node_type="event_loop",
+    system_prompt="""
+You are a rigorous research agent.
+
+1. Search for authoritative sources on the topic
+2. Fetch and analyze source content
+3. Extract key findings with citations
+4. Call set_output with findings and sources
+""",
+    input_keys=["research_topic", "research_questions"],
+    output_keys=["findings", "sources"],
+    tools=["web_search", "fetch_url", "save_data"],
+    client_facing=False,  # Autonomous work
+)
+
+# Review node - checkpoint with user
+review_node = NodeSpec(
+    id="review",
+    name="Review Findings",
+    description="Present findings to user for review",
+    node_type="event_loop",
+    system_prompt="""
+Present the research findings to the user.
+
+Show:
+- Key findings
+- Sources discovered
+- Coverage of research questions
+
+Ask if they want more research or are ready for the final report.
+Set needs_more_research to True or False.
+""",
+    input_keys=["findings", "sources"],
+    output_keys=["needs_more_research"],
+    client_facing=True,
+)
+
+# Report node - generates final output
+report_node = NodeSpec(
+    id="report",
+    name="Generate Report",
+    description="Create final research report",
+    node_type="event_loop",
+    system_prompt="""
+Generate a comprehensive research report.
+
+Format:
+- Executive summary
+- Detailed findings with [1], [2], etc. citations
+- Source list
+
+Every factual claim MUST cite a source.
+""",
+    input_keys=["findings", "sources"],
+    output_keys=["report", "next_action"],
+    client_facing=True,
+)
+```
+
+## Success Criteria for Phase Completion
+
+Define when a node's phase is complete:
+
+```python
+NodeSpec(
+    id="quality_check",
+    node_type="event_loop",
+    success_criteria="""
+The quality check is complete when:
+- All validation tests have passed
+- No critical issues remain
+- The user has approved the results
+""",
+)
+```
+
+When `success_criteria` is set, the implicit judge upgrades to Level 2:
+1. First, output keys must be satisfied
+2. Then, a fast LLM evaluates whether the conversation meets the criteria
+
+## Subagent Delegation
+
+Nodes can delegate to other nodes as subagents:
+
+```python
+parent_node = NodeSpec(
+    id="coordinator",
+    node_type="event_loop",
+    sub_agents=["specialist_a", "specialist_b"],
+    tools=["delegate_to_sub_agent"],
+)
+
+specialist_node = NodeSpec(
+    id="specialist_a",
+    node_type="event_loop",
+    system_prompt="You are a specialist in topic A.",
+)
+```
+
+The parent can call `delegate_to_sub_agent(sub_agent_id="specialist_a", task="...")` to run the subagent.
+
+## Node Context
+
+At runtime, nodes receive a `NodeContext` with everything they need:
+
+```python
+from framework.graph.node import NodeContext, NodeResult
+
+@dataclass
+class NodeContext:
+    # Core runtime
+    runtime: Runtime
+    
+    # Node identity
+    node_id: str
+    node_spec: NodeSpec
+    
+    # State
+    memory: SharedMemory  # Shared state between nodes
+    input_data: dict[str, Any]
+    
+    # LLM access
+    llm: LLMProvider | None
+    available_tools: list[Tool]
+    
+    # Goal context
+    goal_context: str
+    
+    # Configuration
+    max_tokens: int
+    attempt: int
+    max_attempts: int
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Event Loop for Most Tasks">
+    The `event_loop` node type handles most scenarios - tool use, multi-turn conversations, and complex reasoning. Reserve `gcu` for browser automation and `router` for simple branching.
+  </Accordion>
+  
+  <Accordion title="Keep System Prompts Focused">
+    Each node should have a single, clear purpose. Avoid cramming multiple responsibilities into one node - split into multiple nodes instead.
+  </Accordion>
+  
+  <Accordion title="Be Explicit About I/O">
+    Clearly define `input_keys` and `output_keys`. This makes data flow visible and enables validation.
+  </Accordion>
+  
+  <Accordion title="Use client_facing Sparingly">
+    Only set `client_facing=True` for nodes that genuinely need user interaction. Worker nodes should run autonomously.
+  </Accordion>
+  
+  <Accordion title="Validate Critical Outputs">
+    Use `output_model` with Pydantic for structured outputs that downstream nodes depend on.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Tools & Integrations" icon="wrench" href="/building/tools-and-integrations">
+    Add external tools to your nodes
+  </Card>
+  <Card title="Testing" icon="flask" href="/building/testing-agents">
+    Test node behavior and output
+  </Card>
+</CardGroup>

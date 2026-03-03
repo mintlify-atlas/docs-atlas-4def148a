@@ -1,0 +1,187 @@
+---
+title: Changelog
+description: Release notes and version history for the Hive agent framework
+---
+
+## v0.5.1 - The Hive Gets a Brain
+
+**Release Date:** February 18, 2026
+
+v0.5.1 is our most ambitious release yet. Hive agents can now **build other agents** -- the new Hive Coder meta-agent writes, tests, and fixes agent packages from natural language. The runtime grows multi-graph support so one session can orchestrate multiple agents simultaneously. The TUI gets a complete overhaul with an in-app agent picker, live streaming, and seamless escalation to the Coder. And we're now provider-agnostic: Claude Code subscriptions, OpenAI-compatible endpoints, and any LiteLLM-supported model work out of the box.
+
+### Highlights
+
+<CardGroup cols={2}>
+  <Card title="Hive Coder" icon="robot">
+    A native meta-agent that builds complete agent packages from natural language specifications.
+    
+    ```bash
+    # Launch the Coder directly
+    hive code
+    
+    # Or escalate from any running agent
+    Ctrl+E  # or /coder in chat
+    ```
+  </Card>
+
+  <Card title="Multi-Graph Runtime" icon="diagram-project">
+    Load, manage, and switch between multiple agent graphs in a single session.
+    
+    Six new lifecycle tools: `load_agent`, `unload_agent`, `start_agent`, `restart_agent`, `list_agents`, `get_user_presence`
+  </Card>
+
+  <Card title="TUI Revamp" icon="terminal">
+    Ground-up rebuild with agent picker, live streaming, PDF attachments, and multi-graph commands.
+    
+    **New features:**
+    - Agent Picker (Ctrl+A)
+    - Live streaming pane
+    - PDF attachments (/attach)
+    - Multi-graph commands
+  </Card>
+
+  <Card title="Provider-Agnostic LLMs" icon="brain">
+    Support for 100+ LLM providers through LiteLLM.
+    
+    - Claude Code subscriptions
+    - OpenAI-compatible endpoints
+    - Any LiteLLM model
+  </Card>
+</CardGroup>
+
+### What's New
+
+<AccordionGroup>
+  <Accordion title="Architecture & Runtime" icon="cube" defaultOpen>
+    - **Hive Coder meta-agent** - Natural-language agent builder with reference docs and guardian watchdog
+    - **Multi-graph agent sessions** - 6 lifecycle tools for managing multiple agents
+    - **Claude Code subscription support** - OAuth token refresh with auto-detection
+    - **OpenAI-compatible endpoint support** - `api_base` and `extra_kwargs` in RuntimeConfig
+    - **Remove deprecated node types** - Migration to `event_loop` node type
+    - **Interactive credential setup** - Guided setup with health checks
+    - **Pre-start confirmation prompt** - Allow credential updates before execution
+    - **Event bus multi-graph support** - `graph_id` on events, `filter_graph` on subscriptions
+  </Accordion>
+
+  <Accordion title="TUI Improvements" icon="terminal">
+    - **In-app agent picker** (Ctrl+A) - Tabbed modal with metadata badges
+    - **Runtime-optional TUI startup** - Launch without pre-loaded agent
+    - **Hive Coder escalation** (Ctrl+E) - Escalate and return
+    - **PDF attachment support** - `/attach` and `/detach` commands
+    - **Streaming output pane** - Dedicated RichLog widget
+    - **Multi-graph TUI commands** - `/graphs`, `/graph`, `/load`, `/unload`
+    - **Agent Guardian watchdog** - Event-driven failure monitor
+  </Accordion>
+
+  <Accordion title="New Tool Integrations" icon="wrench">
+    | Tool | Description | Contributor |
+    |------|-------------|-------------|
+    | **Discord** | 4 MCP tools for guilds, channels, and messages | @mishrapravin114 |
+    | **Exa Search API** | 4 AI-powered search tools with neural/keyword search | @JeetKaria06 |
+    | **Razorpay** | 6 payment processing tools for payments and invoices | @shivamshahi07 |
+    | **Google Docs** | Document creation, reading, and editing with OAuth | @haliaeetusvocifer |
+    | **Gmail enhancements** | Expanded mail operations | @bryanadenhq |
+  </Accordion>
+
+  <Accordion title="Infrastructure" icon="server">
+    - **Default node type → `event_loop`** - Simplified agent creation
+    - **Default `max_node_visits` → 0 (unlimited)** - Reduced friction for feedback loops
+    - **Remove `function` field from NodeSpec** - Follows deprecation
+    - **LiteLLM OAuth patch** - Correct header construction
+    - **Orchestrator config centralization** - Centralized configuration
+    - **System prompt datetime injection** - Time-aware agent behavior
+    - **Utils module exports** - Proper `__init__.py` exports
+    - **Increased default max_tokens** - Opus 4.6: 32768, Sonnet 4.5: 16384
+  </Accordion>
+</AccordionGroup>
+
+### Bug Fixes
+
+- Flush WIP accumulator outputs on cancel/failure
+- Stall detection state preserved across resume
+- Skip client-facing blocking for event-triggered executions
+- Executor retry override scoped to EventLoopNode instances
+- Add `_awaiting_input` flag to prevent input injection race conditions
+- Fix TUI streaming display
+- Fix `_return_from_escalation` crash
+- Fix tools registration for Google Docs credentials
+- Fix email agent version conflicts
+- Fix coder tool timeouts
+
+### Agent Updates
+
+- **Email Inbox Management** - Consolidated agents with updated prompts
+- **Job Hunter** - Updated node prompts with PDF resume selection
+- **Deep Research Agent** - Revised node implementations
+- **Tech News Reporter** - Revised node prompts
+- **Vulnerability Assessment** - Expanded assessment instructions
+
+### Breaking Changes
+
+<Warning>
+- **Deprecated node types raise `RuntimeError`** - `llm_tool_use`, `llm_generate`, `function`, `router`, `human_input` now fail. Migrate to `event_loop`.
+- **`NodeSpec.node_type` defaults to `"event_loop"`** (was `"llm_tool_use"`)
+- **`NodeSpec.max_node_visits` defaults to `0` / unlimited** (was `1`)
+- **`NodeSpec.function` field removed** - Use event_loop nodes with tools instead
+</Warning>
+
+### Migration Guide
+
+<Tabs>
+  <Tab title="Before (v0.5.0)">
+    ```python
+    # These now raise RuntimeError
+    NodeSpec(node_type="llm_tool_use", ...)
+    NodeSpec(node_type="function", function=my_func, ...)
+    ```
+  </Tab>
+  <Tab title="After (v0.5.1)">
+    ```python
+    # Use event_loop for everything
+    NodeSpec(node_type="event_loop", ...)
+    # or just omit node_type (it's the default now)
+    NodeSpec(...)
+    ```
+  </Tab>
+</Tabs>
+
+### Community Contributors
+
+A huge thank you to everyone who contributed to this release:
+
+- **Richard Tang** (@RichardTang-Aden) - Interactive credential setup, pre-start confirmation, email agent consolidation
+- **Pravin Mishra** (@mishrapravin114) - Discord integration
+- **Jeet Karia** (@JeetKaria06) - Exa Search API integration
+- **Shivam Shahi** (@shivamshahi07) - Razorpay integration
+- **Siddharth Varshney** (@Siddharth2624) - Utils module exports
+- **@haliaeetusvocifer** - Google Docs integration
+- **Bryan** (@bryanadenhq) - PDF selection, inbox agent fixes
+- **@paarths-collab** - Documentation improvements
+
+### Upgrading
+
+```bash
+git pull origin main
+uv sync
+```
+
+### Try the New Hive Coder
+
+```bash
+# Launch Coder directly
+hive code
+
+# Or from TUI -- press Ctrl+E to escalate
+hive tui
+```
+
+### What's Next
+
+- **Agent-to-agent communication** - One agent's output triggers another
+- **Cost visibility** - Detailed runtime log of LLM costs
+- **Persistent webhook subscriptions** - Survive agent restarts
+- **Remote agent deployment** - Run agents as long-lived services
+
+## Previous Releases
+
+For complete release history, visit the [GitHub Releases page](https://github.com/aden-hive/hive/releases).

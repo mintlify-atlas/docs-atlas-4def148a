@@ -1,0 +1,180 @@
+---
+title: Tools Overview
+description: Comprehensive toolkit for AI agents to interact with external systems and services
+---
+
+# Tools Overview
+
+Hive provides a comprehensive collection of tools that enable AI agents to interact with external systems, process data, and perform actions via the Model Context Protocol (MCP). All tools follow consistent patterns and are designed for reliability and security.
+
+## Architecture
+
+Tools are organized into categories based on functionality:
+
+- **File System** - Read, write, search, and modify files
+- **Web & Search** - Search the web, scrape content, access knowledge bases
+- **Communication** - Send emails, Slack messages, Discord messages
+- **Productivity** - Manage calendars, CRM contacts, scheduling
+- **Cloud APIs** - Google services, GitHub, BigQuery
+- **Security** - Port scanning, SSL analysis, DNS security checks
+- **Data Processing** - CSV, Excel, PDF reading and manipulation
+
+## Tool Registration
+
+Tools are registered with FastMCP using the decorator pattern:
+
+```python
+from fastmcp import FastMCP
+from aden_tools.tools import register_all_tools
+
+mcp = FastMCP("tools")
+register_all_tools(mcp)
+mcp.run()
+```
+
+## Credential Management
+
+Tools that require API access support two credential patterns:
+
+### Simple Tools (No Credentials)
+
+```python
+def register_tools(mcp: FastMCP) -> None:
+    @mcp.tool()
+    def my_local_tool(path: str) -> dict:
+        """Process a local file."""
+        return {"result": process_file(path)}
+```
+
+### API Tools (With Credentials)
+
+```python
+def register_tools(
+    mcp: FastMCP,
+    credentials: CredentialStoreAdapter | None = None,
+) -> None:
+    def _get_token() -> str | None:
+        if credentials is not None:
+            return credentials.get("my_api")
+        return os.getenv("MY_API_KEY")
+    
+    @mcp.tool()
+    def my_api_tool(query: str) -> dict:
+        token = _get_token()
+        if not token:
+            return {"error": "API key not configured"}
+        # Use token...
+```
+
+## Error Handling
+
+All tools follow consistent error handling patterns:
+
+<CodeGroup>
+
+```python Success Response
+{
+    "success": True,
+    "data": {...},
+    "total": 10
+}
+```
+
+```python Error Response
+{
+    "error": "Descriptive error message",
+    "help": "Suggestion for fixing the issue"
+}
+```
+
+</CodeGroup>
+
+## Common Patterns
+
+### Pagination
+
+Many tools support pagination for large result sets:
+
+```python
+result = tool_list_items(
+    max_results=100,
+    page_token="next_page_token_here"
+)
+```
+
+### Search Queries
+
+Search tools accept natural language or structured queries:
+
+```python
+# Web search
+web_search(query="fastmcp tutorial", num_results=10)
+
+# Gmail search
+gmail_list_messages(query="is:unread from:user@example.com")
+```
+
+### Batch Operations
+
+Some tools support batch operations for efficiency:
+
+```python
+# Batch modify Gmail labels
+gmail_batch_modify_messages(
+    message_ids=["id1", "id2", "id3"],
+    add_labels=["STARRED"],
+    remove_labels=["UNREAD"]
+)
+```
+
+## Available Tool Categories
+
+<CardGroup cols={2}>
+  <Card title="File System" icon="folder" href="/tools/file-system">
+    Read, write, search, and modify files
+  </Card>
+  <Card title="Web Search" icon="magnifying-glass" href="/tools/web-search">
+    Search engines and web scraping
+  </Card>
+  <Card title="Communication" icon="comments" href="/tools/communication">
+    Email, Slack, Discord integration
+  </Card>
+  <Card title="Productivity" icon="calendar" href="/tools/productivity">
+    Calendars and CRM systems
+  </Card>
+  <Card title="Cloud APIs" icon="cloud" href="/tools/cloud-apis">
+    Google, GitHub, cloud services
+  </Card>
+  <Card title="Security" icon="shield" href="/tools/security">
+    Security scanning and analysis
+  </Card>
+</CardGroup>
+
+## MCP Server
+
+All tools are exposed via an MCP server that can run in HTTP or STDIO mode:
+
+```bash
+# HTTP mode (default)
+python mcp_server.py --port 4001
+
+# STDIO mode (for local testing)
+python mcp_server.py --stdio
+```
+
+The server includes:
+- Health check endpoint: `GET /health`
+- Tool discovery via MCP protocol
+- Automatic credential validation
+- Error handling and logging
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Creating Tools" icon="wrench" href="/tools/creating-tools">
+    Learn how to build custom tools
+  </Card>
+  <Card title="MCP Server Setup" icon="server" href="/tools/mcp-server-guide">
+    Configure and run the MCP server
+  </Card>
+</CardGroup>

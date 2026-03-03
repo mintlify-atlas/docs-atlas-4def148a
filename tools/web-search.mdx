@@ -1,0 +1,519 @@
+---
+title: Web Search Tools
+description: Search the web, scrape content, and access knowledge bases
+---
+
+# Web Search Tools
+
+Web search tools enable agents to find information online, scrape web content, and access knowledge repositories like Wikipedia and arXiv.
+
+## Web Search
+
+### web_search
+
+Search the web using multiple providers (Google Custom Search or Brave Search).
+
+<ParamField path="query" type="string" required>
+  Search query (1-500 characters)
+</ParamField>
+
+<ParamField path="num_results" type="integer" default="10">
+  Number of results to return (1-20 for Brave, 1-10 for Google)
+</ParamField>
+
+<ParamField path="country" type="string" default="us">
+  Country code for localized results (us, uk, de, etc.)
+</ParamField>
+
+<ParamField path="language" type="string" default="en">
+  Language code for results (en, es, fr, etc.) - Google only
+</ParamField>
+
+<ParamField path="provider" type="string" default="auto">
+  Search provider: "auto", "google", or "brave"
+</ParamField>
+
+<CodeGroup>
+
+```python Auto Provider
+result = web_search(
+    query="FastMCP tutorial",
+    num_results=10
+)
+
+for item in result["results"]:
+    print(f"{item['title']}: {item['url']}")
+    print(item['snippet'])
+
+print(f"Provider used: {result['provider']}")
+```
+
+```python Specific Provider
+result = web_search(
+    query="Python agents",
+    num_results=5,
+    provider="brave"
+)
+```
+
+```json Response
+{
+  "query": "FastMCP tutorial",
+  "results": [
+    {
+      "title": "Getting Started with FastMCP",
+      "url": "https://example.com/fastmcp",
+      "snippet": "Learn how to build MCP servers..."
+    }
+  ],
+  "total": 10,
+  "provider": "brave"
+}
+```
+
+</CodeGroup>
+
+### Configuration
+
+Set up credentials for your preferred provider:
+
+<Tabs>
+  <Tab title="Brave Search">
+    ```bash
+    export BRAVE_SEARCH_API_KEY=your_key_here
+    ```
+    
+    Get your API key at [brave.com/search/api](https://brave.com/search/api/)
+  </Tab>
+  
+  <Tab title="Google Custom Search">
+    ```bash
+    export GOOGLE_API_KEY=your_key_here
+    export GOOGLE_CSE_ID=your_cse_id_here
+    ```
+    
+    Setup:
+    1. Get API key at [console.cloud.google.com](https://console.cloud.google.com/)
+    2. Create Custom Search Engine at [programmablesearchengine.google.com](https://programmablesearchengine.google.com/)
+  </Tab>
+</Tabs>
+
+<Note>
+When `provider="auto"`, the tool tries Brave first for backward compatibility, then falls back to Google.
+</Note>
+
+## Web Scraping
+
+### web_scrape
+
+Scrape and extract content from web pages.
+
+<ParamField path="url" type="string" required>
+  URL to scrape
+</ParamField>
+
+<ParamField path="extract_text" type="boolean" default="true">
+  Extract clean text content
+</ParamField>
+
+<ParamField path="extract_links" type="boolean" default="false">
+  Extract all links from the page
+</ParamField>
+
+<ParamField path="extract_metadata" type="boolean" default="false">
+  Extract meta tags and page metadata
+</ParamField>
+
+```python Example
+result = web_scrape(
+    url="https://example.com/article",
+    extract_text=True,
+    extract_links=True,
+    extract_metadata=True
+)
+
+if result["success"]:
+    print(f"Title: {result['metadata']['title']}")
+    print(f"Text length: {len(result['text'])} chars")
+    print(f"Links found: {len(result['links'])}")
+```
+
+<Warning>
+Respect robots.txt and website terms of service when scraping. Add appropriate delays between requests.
+</Warning>
+
+## Wikipedia
+
+### search_wikipedia
+
+Search Wikipedia for pages and summaries.
+
+<ParamField path="query" type="string" required>
+  Search query
+</ParamField>
+
+<ParamField path="limit" type="integer" default="5">
+  Maximum number of results (1-10)
+</ParamField>
+
+<ParamField path="language" type="string" default="en">
+  Wikipedia language edition (en, es, fr, de, etc.)
+</ParamField>
+
+<CodeGroup>
+
+```python Search
+result = search_wikipedia(
+    query="Artificial Intelligence",
+    limit=3,
+    language="en"
+)
+
+for page in result["results"]:
+    print(f"{page['title']}")
+    print(page['summary'])
+    print(f"URL: {page['url']}\n")
+```
+
+```json Response
+{
+  "query": "Artificial Intelligence",
+  "results": [
+    {
+      "title": "Artificial intelligence",
+      "summary": "Artificial intelligence (AI) is...",
+      "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+      "page_id": 1234
+    }
+  ],
+  "total": 3
+}
+```
+
+</CodeGroup>
+
+## Academic Papers
+
+### search_papers
+
+Search arXiv for scientific papers.
+
+<ParamField path="query" type="string" required>
+  Search query
+</ParamField>
+
+<ParamField path="max_results" type="integer" default="10">
+  Maximum papers to return (1-100)
+</ParamField>
+
+<ParamField path="sort_by" type="string" default="relevance">
+  Sort order: "relevance", "lastUpdatedDate", or "submittedDate"
+</ParamField>
+
+```python Example
+result = search_papers(
+    query="large language models",
+    max_results=5,
+    sort_by="submittedDate"
+)
+
+for paper in result["papers"]:
+    print(f"{paper['title']}")
+    print(f"Authors: {', '.join(paper['authors'])}")
+    print(f"Published: {paper['published']}")
+    print(f"arXiv ID: {paper['arxiv_id']}\n")
+```
+
+### download_paper
+
+Download a PDF from arXiv.
+
+```python
+result = download_paper(
+    arxiv_id="2301.00001",
+    output_path="papers/"
+)
+
+if result["success"]:
+    print(f"Downloaded to: {result['file_path']}")
+    print(f"Size: {result['size_bytes']} bytes")
+```
+
+## Scholarly Search (SerpAPI)
+
+### scholar_search
+
+Search Google Scholar for academic papers.
+
+<Note>
+Requires SerpAPI credentials: `SERPAPI_API_KEY`
+</Note>
+
+```python
+result = scholar_search(
+    query="machine learning",
+    num_results=10
+)
+
+for paper in result["results"]:
+    print(f"{paper['title']}")
+    print(f"Citations: {paper['cited_by']}")
+    print(f"Authors: {paper['authors']}")
+```
+
+### scholar_get_citations
+
+Get citations for a specific paper.
+
+```python
+result = scholar_get_citations(
+    paper_id="12345678",
+    num_results=20
+)
+```
+
+### scholar_get_author
+
+Get author profile and publications.
+
+```python
+result = scholar_get_author(author_id="ABC123")
+
+print(f"Name: {result['name']}")
+print(f"Affiliation: {result['affiliation']}")
+print(f"H-index: {result['h_index']}")
+```
+
+## Patent Search (SerpAPI)
+
+### patents_search
+
+Search for patents using SerpAPI.
+
+```python
+result = patents_search(
+    query="artificial intelligence",
+    country="US",
+    num_results=10
+)
+
+for patent in result["results"]:
+    print(f"{patent['title']}")
+    print(f"Patent Number: {patent['patent_number']}")
+    print(f"Filed: {patent['filing_date']}")
+```
+
+### patents_get_details
+
+Get detailed information about a specific patent.
+
+```python
+result = patents_get_details(patent_id="US1234567")
+```
+
+## Semantic Search (Exa)
+
+### exa_search
+
+Perform semantic search using Exa AI.
+
+<Note>
+Requires Exa API key: `EXA_API_KEY`
+</Note>
+
+<ParamField path="query" type="string" required>
+  Natural language search query
+</ParamField>
+
+<ParamField path="num_results" type="integer" default="10">
+  Number of results (1-100)
+</ParamField>
+
+<ParamField path="type" type="string" default="auto">
+  Search type: "auto", "keyword", or "neural"
+</ParamField>
+
+```python Example
+result = exa_search(
+    query="best practices for AI agent development",
+    num_results=5,
+    type="neural"
+)
+
+for item in result["results"]:
+    print(f"{item['title']}")
+    print(f"Relevance: {item['score']}")
+    print(f"URL: {item['url']}\n")
+```
+
+### exa_answer
+
+Get direct answers to questions using Exa.
+
+```python
+result = exa_answer(
+    query="What is the Model Context Protocol?"
+)
+
+print(result["answer"])
+print(f"Sources: {len(result['sources'])}")
+```
+
+### exa_find_similar
+
+Find pages similar to a given URL.
+
+```python
+result = exa_find_similar(
+    url="https://example.com/article",
+    num_results=10
+)
+```
+
+### exa_get_contents
+
+Retrieve full content for a list of URLs.
+
+```python
+urls = [
+    "https://example.com/page1",
+    "https://example.com/page2"
+]
+
+result = exa_get_contents(urls=urls)
+
+for content in result["contents"]:
+    print(f"{content['url']}")
+    print(content['text'][:200])
+```
+
+## News Search
+
+### news_search
+
+Search for news articles.
+
+<ParamField path="query" type="string" required>
+  Search query
+</ParamField>
+
+<ParamField path="language" type="string" default="en">
+  Language code
+</ParamField>
+
+<ParamField path="country" type="string" default="us">
+  Country code
+</ParamField>
+
+<ParamField path="from_date" type="string">
+  Start date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="to_date" type="string">
+  End date (YYYY-MM-DD)
+</ParamField>
+
+```python Example
+result = news_search(
+    query="artificial intelligence",
+    language="en",
+    country="us",
+    from_date="2024-01-01"
+)
+
+for article in result["articles"]:
+    print(f"{article['title']}")
+    print(f"Source: {article['source']}")
+    print(f"Published: {article['published_at']}")
+```
+
+### news_headlines
+
+Get top headlines by category.
+
+```python
+result = news_headlines(
+    category="technology",
+    country="us",
+    language="en"
+)
+```
+
+### news_by_company
+
+Get news articles about a specific company.
+
+```python
+result = news_by_company(
+    company="Tesla",
+    num_results=20
+)
+```
+
+### news_sentiment
+
+Analyze sentiment of news articles.
+
+```python
+result = news_sentiment(
+    query="OpenAI",
+    num_results=50
+)
+
+print(f"Positive: {result['positive']}%")
+print(f"Negative: {result['negative']}%")
+print(f"Neutral: {result['neutral']}%")
+```
+
+## Rate Limits & Best Practices
+
+<AccordionGroup>
+  <Accordion title="Respect Rate Limits">
+    Most search APIs have rate limits:
+    - **Brave Search**: 1,000 queries/month (free tier)
+    - **Google Custom Search**: 100 queries/day (free tier)
+    - **SerpAPI**: Varies by plan
+    
+    Implement exponential backoff on 429 errors.
+  </Accordion>
+
+  <Accordion title="Cache Results">
+    Cache search results to avoid redundant API calls:
+    ```python
+    # Use save_data to cache results
+    result = web_search(query="...")
+    save_data(
+        filename="search_cache.json",
+        data=json.dumps(result),
+        data_dir="/data/cache"
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Timeouts">
+    All search tools use 30-second timeouts. Handle timeout errors gracefully:
+    ```python
+    result = web_search(query="...")
+    if "error" in result and "timeout" in result["error"].lower():
+        # Retry or use cached results
+    ```
+  </Accordion>
+
+  <Accordion title="Filter Results">
+    Use specific queries and filters to get relevant results:
+    - Add date ranges for recent content
+    - Specify language and country codes
+    - Use boolean operators: AND, OR, NOT
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Communication Tools" icon="comments" href="/tools/communication">
+    Email, Slack, Discord integration
+  </Card>
+  <Card title="Cloud APIs" icon="cloud" href="/tools/cloud-apis">
+    Google services and GitHub
+  </Card>
+</CardGroup>
