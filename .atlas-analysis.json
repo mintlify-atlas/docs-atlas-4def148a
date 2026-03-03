@@ -1,0 +1,176 @@
+{
+  "projectType": "framework",
+  "projectName": "Hive",
+  "projectDescription": "Outcome-driven agent development framework that evolves through self-improvement and failure-based learning",
+  "theme": "aspen",
+  "primaryColor": "#ff9800",
+  "lightColor": "#ffbe42",
+  "darkColor": "#ed8c00",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/goals-and-outcomes",
+              "concepts/agent-graphs",
+              "concepts/worker-agents",
+              "concepts/evolution",
+              "concepts/human-in-the-loop"
+            ]
+          },
+          {
+            "group": "Building Agents",
+            "pages": [
+              "building/creating-agents",
+              "building/defining-goals",
+              "building/node-configuration",
+              "building/tools-and-integrations",
+              "building/testing-agents"
+            ]
+          },
+          {
+            "group": "Runtime & Execution",
+            "pages": [
+              "runtime/sessions",
+              "runtime/headless-execution",
+              "runtime/monitoring",
+              "runtime/cost-tracking",
+              "runtime/crash-recovery"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/self-hosting",
+              "guides/credential-management",
+              "guides/mcp-integration",
+              "guides/llm-providers",
+              "guides/browser-automation"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Tools & Integrations",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "tools/overview",
+              "tools/creating-tools"
+            ]
+          },
+          {
+            "group": "Built-in Tools",
+            "pages": [
+              "tools/file-system",
+              "tools/web-search",
+              "tools/communication",
+              "tools/productivity",
+              "tools/cloud-apis",
+              "tools/security"
+            ]
+          },
+          {
+            "group": "MCP Integration",
+            "pages": [
+              "tools/mcp-server-guide",
+              "tools/mcp-builder-tools"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Framework Core",
+            "pages": [
+              "api/runtime",
+              "api/builder-query",
+              "api/graph",
+              "api/nodes",
+              "api/edges"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "api/goal-schema",
+              "api/agent-config",
+              "api/credentials"
+            ]
+          },
+          {
+            "group": "CLI Commands",
+            "pages": [
+              "api/cli-reference",
+              "api/cli-run",
+              "api/cli-test",
+              "api/cli-tui"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Community",
+            "pages": [
+              "resources/contributing",
+              "resources/examples",
+              "resources/roadmap",
+              "resources/changelog"
+            ]
+          },
+          {
+            "group": "Support",
+            "pages": [
+              "resources/faq",
+              "resources/troubleshooting",
+              "resources/security"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Goal-driven agent generation from natural language",
+    "Self-improving agents through evolution and failure analysis",
+    "Dynamic node graphs with flexible edge routing",
+    "Human-in-the-loop intervention nodes",
+    "Built-in observability and real-time monitoring",
+    "100+ MCP tools for system integration",
+    "Multi-LLM provider support (OpenAI, Anthropic, Google, local models)",
+    "Production-ready runtime with cost tracking and crash recovery",
+    "Browser automation capabilities",
+    "Encrypted credential management"
+  ],
+  "publicApiSurface": [
+    "Runtime",
+    "BuilderQuery",
+    "Goal",
+    "SuccessCriterion",
+    "Constraint",
+    "event_loop node",
+    "hive CLI",
+    "register_all_tools()",
+    "FastMCP integration",
+    "Worker agent sessions",
+    "Shared memory API",
+    "Decision logging API"
+  ]
+}
